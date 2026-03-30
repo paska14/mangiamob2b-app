@@ -5,87 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mangiamo Italiano — App</title>
     <script src="https://open2b.dev/admin-sdk/open2b-admin-sdk-v7.8.min.js"></script>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            font-size: 14px;
-            color: #1a1a1a;
-            background: #f5f5f5;
-            padding: 24px;
-        }
-
-        h1 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 24px;
-            color: #111;
-        }
-
-        .card {
-            background: #fff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-
-        .card h2 {
-            font-size: 13px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #666;
-            margin-bottom: 12px;
-        }
-
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .info-row:last-child {
-            border-bottom: none;
-        }
-
-        .info-label {
-            color: #666;
-        }
-
-        .info-value {
-            font-weight: 500;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .status--ok {
-            background: #e6f4ea;
-            color: #2d7a3f;
-        }
-
-        .status--error {
-            background: #fce8e6;
-            color: #c5221f;
-        }
-
-        .loading {
-            color: #999;
-            font-style: italic;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -123,41 +43,19 @@
         </div>
     </div>
 
-    <script>
-        // Verifica che l'SDK sia caricato correttamente
-        if (typeof Admin !== "undefined") {
-            document.getElementById("sdk-status").innerHTML =
-                '<span class="status status--ok">Connesso</span>';
+    <div class="card">
+        <h2>Vista produttore</h2>
+        <div class="producer-toolbar">
+            <select id="producer-select" disabled>
+                <option value="">— caricamento produttori... —</option>
+            </select>
+            <span id="producer-count-badge" class="badge" hidden></span>
+            <button id="export-csv-btn" class="btn-export" hidden>Esporta CSV</button>
+        </div>
+        <div id="producer-table-container"></div>
+    </div>
 
-            // Legge info versione e lingua
-            Admin.getInfo(function(info) {
-                document.getElementById("api-version").textContent = info.apiVersion || "—";
-                document.getElementById("locale").textContent = info.locale || "—";
-            });
-
-            // Conta i prodotti
-            Admin.api("commerce.products.count", null, function(res) {
-                document.getElementById("products-count").textContent =
-                    res.status === "ok" ? res.count : "errore";
-            });
-
-            // Conta i reparti
-            Admin.api("commerce.departments.find", { fields: ["id"] }, function(res) {
-                document.getElementById("departments-count").textContent =
-                    res.status === "ok" ? res.departments.length : "errore";
-            });
-
-            // Conta i produttori
-            Admin.api("commerce.producers.find", { fields: ["id"] }, function(res) {
-                document.getElementById("producers-count").textContent =
-                    res.status === "ok" ? res.producers.length : "errore";
-            });
-
-        } else {
-            document.getElementById("sdk-status").innerHTML =
-                '<span class="status status--error">SDK non disponibile</span>';
-        }
-    </script>
+    <script type="module" src="js/main.js"></script>
 
 </body>
 </html>
