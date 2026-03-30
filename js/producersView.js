@@ -10,7 +10,6 @@ export function setupProducersView() {
     const exportBtn = document.getElementById("export-csv-btn");
     const tableContainer = document.getElementById("producer-table-container");
 
-    // Carica lista produttori
     Admin.api("commerce.producers.find", { fields: ["id", "name"], order: ["name"] }, function(res) {
         if (res.status !== "ok" || res.producers.length === 0) {
             select.innerHTML = '<option value="">— nessun produttore trovato —</option>';
@@ -37,13 +36,13 @@ export function setupProducersView() {
 
         if (!producerId) return;
 
-        tableContainer.innerHTML = '<p class="table-empty">Caricamento... (id: ' + producerId + ')</p>';
+        tableContainer.innerHTML = '<p class="table-empty">Caricamento...</p>';
 
-        loadProducts(producerId, function(products) {
+        fetchPage(producerId, 0, [], function(products) {
             currentProducts = products;
             badge.textContent = products.length + " prodotti";
             badge.hidden = false;
-            exportBtn.hidden = false;
+            exportBtn.hidden = products.length === 0;
             renderTable(products, tableContainer);
         });
     });
@@ -55,35 +54,27 @@ export function setupProducersView() {
     });
 }
 
-function loadProducts(producerId, callback) {
-    fetchPage(producerId, 0, [], callback);
-}
-
 function fetchPage(producerId, offset, accumulated, callback) {
-    var dbg = document.getElementById("producer-table-container");
-
-    // Test senza filtro per confronto
     Admin.api("commerce.products.find", {
-        fields: ["id", "producer"],
-        limit: 3,
-        first: 0
-    }, function(noFilterRes) {
-        Admin.api("commerce.products.find", {
-            conditions: { producer: producerId },
-            fields: ["id", "code", "name", "department", "items"],
-            order: ["name"],
-            limit: PAGE_SIZE,
-            first: offset
-        }, function(res) {
-            dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px;overflow:auto;max-height:400px'>"
-                + "=== SENZA FILTRO (primi 3 prodotti) ===\n"
-                + JSON.stringify(noFilterRes, null, 2)
-                + "\n\n=== CON FILTRO producer=" + producerId + " ===\n"
-                + JSON.stringify(res, null, 2)
-                + "</pre>";
+        conditions: { producer: producerId },
+        fields: ["id", "code", "name", "departments", "variants", "salePrice"],
+        order: ["name"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (res.status !== "ok") {
+            callback(accumulated);
+            return;
+        }
 
-            // Non chiamare callback — mantieni il debug visibile
-        });
+        const page = res.products || [];
+        const all = accumulated.concat(page);
+
+        if (page.length === PAGE_SIZE) {
+            fetchPage(producerId, offset + PAGE_SIZE, all, callback);
+        } else {
+            callback(all);
+        }
     });
 }
 
@@ -94,13 +85,13 @@ function renderTable(products, container) {
     }
 
     const rows = products.map(function(p) {
-        const item = (p.items && p.items[0]) || {};
-        const dept = (p.department && p.department.name) ? p.department.name : "—";
-        const sku = item.sku || "—";
-        const price = (item.salePrice && item.salePrice.gross != null)
-            ? "€ " + Number(item.salePrice.gross).toFixed(2)
+        const dept = (p.departments && p.departments[0]) ? p.departments[0].name : "—";
+        const variant = (p.variants && p.variants[0]) || {};
+        const sku = variant.sku || "—";
+        const price = (p.salePrice && p.salePrice.gross != null)
+            ? "€ " + Number(p.salePrice.gross).toFixed(2)
             : "—";
-        const stock = (item.stock != null) ? item.stock : "—";
+        const stock = (variant.stock != null) ? variant.stock : "—";
 
         return "<tr>" +
             "<td>" + escapeHTML(p.code || "") + "</td>" +
@@ -124,18 +115,18 @@ function renderTable(products, container) {
 function downloadCSV(products, producerName) {
     const headers = ["Codice", "Nome", "Reparto", "SKU", "Prezzo lordo", "Stock"];
     const rows = products.map(function(p) {
-        const item = (p.items && p.items[0]) || {};
-        const dept = (p.department && p.department.name) ? p.department.name : "";
-        const price = (item.salePrice && item.salePrice.gross != null)
-            ? Number(item.salePrice.gross).toFixed(2)
+        const dept = (p.departments && p.departments[0]) ? p.departments[0].name : "";
+        const variant = (p.variants && p.variants[0]) || {};
+        const price = (p.salePrice && p.salePrice.gross != null)
+            ? Number(p.salePrice.gross).toFixed(2)
             : "";
         return [
             p.code || "",
             p.name || "",
             dept,
-            item.sku || "",
+            variant.sku || "",
             price,
-            (item.stock != null) ? item.stock : ""
+            (variant.stock != null) ? variant.stock : ""
         ].map(csvCell).join(";");
     });
 
