@@ -68,6 +68,12 @@ export function setupProducersView() {
             badge.hidden = false;
             exportBtn.hidden = products.length === 0;
             renderTable(products, tableContainer);
+            // DEBUG — aggiunge JSON primo prodotto sotto la tabella
+            if (products.length > 0) {
+                tableContainer.innerHTML +=
+                    "<pre style='font-size:11px;background:#fffbe6;padding:8px;margin-top:12px;overflow:auto;max-height:500px'>"
+                    + "DEBUG primo prodotto:\n" + JSON.stringify(products[0], null, 2) + "</pre>";
+            }
         });
     });
 
@@ -92,13 +98,6 @@ function fetchPage(producerId, offset, accumulated, callback) {
         }
 
         const page = res.products || [];
-
-        // DEBUG — mostra JSON completo del primo prodotto
-        if (offset === 0 && page.length > 0) {
-            document.getElementById("producer-table-container").innerHTML =
-                "<pre style='font-size:11px;background:#fffbe6;padding:8px;overflow:auto;max-height:500px'>"
-                + JSON.stringify(page[0], null, 2) + "</pre>";
-        }
 
         // Rileva il primo gruppo cliente disponibile dai prezzi
         if (firstGroupId === null) {
