@@ -2,7 +2,8 @@ const PAGE_SIZE = 200;
 
 let currentProducts = [];
 let departmentMap = {};   // { id: name }
-let firstGroupId = null;  // primo customer group con prezzo
+let groupMap = {};        // { id: name }
+let activeGroupIds = [];  // group IDs con almeno un prezzo non-null nei prodotti caricati
 
 export function setupProducersView() {
     if (typeof Admin === "undefined") return;
@@ -12,29 +13,27 @@ export function setupProducersView() {
     const exportBtn = document.getElementById("export-csv-btn");
     const tableContainer = document.getElementById("producer-table-container");
 
-    // Carica produttori e reparti in parallelo
-    var producersReady = false;
-    var deptsReady = false;
+    let producersReady = false;
+    let deptsReady = false;
+    let groupsReady = false;
 
     function onReady() {
-        if (!producersReady || !deptsReady) return;
+        if (!producersReady || !deptsReady || !groupsReady) return;
         select.disabled = false;
     }
 
     Admin.api("commerce.producers.find", { fields: ["id", "name"], order: ["name"] }, function(res) {
         if (res.status !== "ok" || res.producers.length === 0) {
             select.innerHTML = '<option value="">— nessun produttore trovato —</option>';
-            producersReady = true;
-            onReady();
-            return;
+        } else {
+            select.innerHTML = '<option value="">— seleziona un produttore —</option>';
+            res.producers.forEach(function(p) {
+                const opt = document.createElement("option");
+                opt.value = p.id;
+                opt.textContent = toStr(p.name);
+                select.appendChild(opt);
+            });
         }
-        select.innerHTML = '<option value="">— seleziona un produttore —</option>';
-        res.producers.forEach(function(p) {
-            const opt = document.createElement("option");
-            opt.value = p.id;
-            opt.textContent = p.name;
-            select.appendChild(opt);
-        });
         producersReady = true;
         onReady();
     });
@@ -49,6 +48,16 @@ export function setupProducersView() {
         onReady();
     });
 
+    Admin.api("commerce.customer-groups.find", { fields: ["id", "name"] }, function(res) {
+        if (res.status === "ok") {
+            res.groups.forEach(function(g) {
+                groupMap[g.id] = toStr(g.name);
+            });
+        }
+        groupsReady = true;
+        onReady();
+    });
+
     select.addEventListener("change", function() {
         const producerId = parseInt(this.value, 10);
 
@@ -56,7 +65,7 @@ export function setupProducersView() {
         exportBtn.hidden = true;
         tableContainer.innerHTML = "";
         currentProducts = [];
-        firstGroupId = null;
+        activeGroupIds = [];
 
         if (!producerId) return;
 
@@ -64,16 +73,12 @@ export function setupProducersView() {
 
         fetchPage(producerId, 0, [], function(products) {
             currentProducts = products;
+            activeGroupIds = detectActiveGroups(products);
+
             badge.textContent = products.length + " prodotti";
             badge.hidden = false;
             exportBtn.hidden = products.length === 0;
             renderTable(products, tableContainer);
-            // DEBUG — aggiunge JSON primo prodotto sotto la tabella
-            if (products.length > 0) {
-                tableContainer.innerHTML +=
-                    "<pre style='font-size:11px;background:#fffbe6;padding:8px;margin-top:12px;overflow:auto;max-height:500px'>"
-                    + "DEBUG primo prodotto:\n" + JSON.stringify(products[0], null, 2) + "</pre>";
-            }
         });
     });
 
@@ -82,6 +87,18 @@ export function setupProducersView() {
         const producerName = select.options[select.selectedIndex].textContent;
         downloadCSV(currentProducts, producerName);
     });
+}
+
+// Raccoglie tutti i group ID che hanno almeno un prezzo non-null tra i prodotti
+function detectActiveGroups(products) {
+    const seen = new Set();
+    products.forEach(function(p) {
+        if (!p.salePrice) return;
+        Object.keys(p.salePrice).forEach(function(gid) {
+            if (p.salePrice[gid] != null) seen.add(gid);
+        });
+    });
+    return Array.from(seen).sort(function(a, b) { return Number(a) - Number(b); });
 }
 
 function fetchPage(producerId, offset, accumulated, callback) {
@@ -96,19 +113,7 @@ function fetchPage(producerId, offset, accumulated, callback) {
             callback(accumulated);
             return;
         }
-
         const page = res.products || [];
-
-        // Rileva il primo gruppo cliente disponibile dai prezzi
-        if (firstGroupId === null) {
-            page.forEach(function(p) {
-                if (firstGroupId === null && p.salePrice) {
-                    const keys = Object.keys(p.salePrice);
-                    if (keys.length > 0) firstGroupId = keys[0];
-                }
-            });
-        }
-
         const all = accumulated.concat(page);
         if (page.length === PAGE_SIZE) {
             fetchPage(producerId, offset + PAGE_SIZE, all, callback);
@@ -123,11 +128,13 @@ function getDeptName(deptIds) {
     return departmentMap[deptIds[0]] || ("ID " + deptIds[0]);
 }
 
-function getPrice(salePrice) {
-    if (!salePrice) return "—";
-    const key = firstGroupId || Object.keys(salePrice)[0];
-    if (!key || salePrice[key] == null) return "—";
-    return "€ " + Number(salePrice[key]).toFixed(2);
+function getGroupName(gid) {
+    return groupMap[gid] || ("Gr." + gid);
+}
+
+function getPriceForGroup(salePrice, gid) {
+    if (!salePrice || salePrice[gid] == null) return "—";
+    return "€ " + Number(salePrice[gid]).toFixed(2);
 }
 
 function renderTable(products, container) {
@@ -136,14 +143,20 @@ function renderTable(products, container) {
         return;
     }
 
-    const priceLabel = firstGroupId ? " (gr." + firstGroupId + ")" : "";
+    const groupHeaders = activeGroupIds.map(function(gid) {
+        return "<th>" + escapeHTML(getGroupName(gid)) + "</th>";
+    }).join("");
 
     const rows = products.map(function(p) {
+        const priceCells = activeGroupIds.map(function(gid) {
+            return "<td>" + getPriceForGroup(p.salePrice, gid) + "</td>";
+        }).join("");
+
         return "<tr>" +
-            "<td>" + escapeHTML(p.code) + "</td>" +
-            "<td>" + escapeHTML(p.name) + "</td>" +
+            "<td>" + escapeHTML(toStr(p.code)) + "</td>" +
+            "<td>" + escapeHTML(toStr(p.name)) + "</td>" +
             "<td>" + escapeHTML(getDeptName(p.departments)) + "</td>" +
-            "<td>" + getPrice(p.salePrice) + "</td>" +
+            priceCells +
             "<td>" + (p.isVisible ? "✓" : "—") + "</td>" +
             "</tr>";
     });
@@ -152,7 +165,7 @@ function renderTable(products, container) {
         '<table class="products-table">' +
             "<thead><tr>" +
                 "<th>Codice</th><th>Nome</th><th>Reparto</th>" +
-                "<th>Prezzo lordo" + escapeHTML(priceLabel) + "</th>" +
+                groupHeaders +
                 "<th>Visibile</th>" +
             "</tr></thead>" +
             "<tbody>" + rows.join("") + "</tbody>" +
@@ -160,23 +173,19 @@ function renderTable(products, container) {
 }
 
 function downloadCSV(products, producerName) {
-    const priceLabel = firstGroupId ? "Prezzo lordo (gr." + firstGroupId + ")" : "Prezzo lordo";
-    const headers = ["Codice", "Nome", "Reparto", priceLabel, "Visibile"];
+    const groupHeaders = activeGroupIds.map(getGroupName);
+    const headers = ["Codice", "Nome", "Reparto"].concat(groupHeaders).concat(["Visibile"]);
 
     const rows = products.map(function(p) {
-        const price = (function() {
-            if (!p.salePrice) return "";
-            const key = firstGroupId || Object.keys(p.salePrice)[0];
-            return (key && p.salePrice[key] != null) ? Number(p.salePrice[key]).toFixed(2) : "";
-        })();
+        const priceCells = activeGroupIds.map(function(gid) {
+            if (!p.salePrice || p.salePrice[gid] == null) return "";
+            return Number(p.salePrice[gid]).toFixed(2);
+        });
 
-        return [
-            toStr(p.code),
-            toStr(p.name),
-            getDeptName(p.departments),
-            price,
-            p.isVisible ? "si" : "no"
-        ].map(csvCell).join(";");
+        return [toStr(p.code), toStr(p.name), getDeptName(p.departments)]
+            .concat(priceCells)
+            .concat([p.isVisible ? "si" : "no"])
+            .map(csvCell).join(";");
     });
 
     const csv = "\uFEFF" + headers.join(";") + "\n" + rows.join("\n");
@@ -208,7 +217,7 @@ function slugify(name) {
 }
 
 function escapeHTML(val) {
-    return toStr(val)
+    return String(val)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
