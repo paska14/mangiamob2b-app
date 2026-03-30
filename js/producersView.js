@@ -121,9 +121,9 @@ function downloadCSV(products, producerName) {
             ? Number(p.salePrice.gross).toFixed(2)
             : "";
         return [
-            p.code || "",
-            p.name || "",
-            dept,
+            toStr(p.code),
+            toStr(p.name),
+            toStr(dept),
             variant.sku || "",
             price,
             (variant.stock != null) ? variant.stock : ""
@@ -152,8 +152,14 @@ function slugify(name) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
-function escapeHTML(str) {
-    return str
+function toStr(val) {
+    if (val == null) return "";
+    if (typeof val === "object") return val.it || val.en || Object.values(val).find(function(v) { return v; }) || "";
+    return String(val);
+}
+
+function escapeHTML(val) {
+    return toStr(val)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
