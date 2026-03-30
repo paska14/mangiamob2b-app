@@ -56,41 +56,30 @@ export function setupProducersView() {
 }
 
 function loadProducts(producerId, callback) {
-    Admin.api("commerce.products.count", { conditions: { producer: producerId } }, function(countRes) {
-        if (countRes.status !== "ok") {
-            callback([]);
+    fetchPage(producerId, 0, [], callback);
+}
+
+function fetchPage(producerId, offset, accumulated, callback) {
+    Admin.api("commerce.products.find", {
+        conditions: { producer: producerId },
+        fields: ["id", "code", "name", "department", "items"],
+        order: ["name"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (res.status !== "ok") {
+            callback(accumulated);
             return;
         }
 
-        const total = countRes.count;
-        const pages = Math.ceil(total / PAGE_SIZE);
-        const allProducts = [];
-        let completed = 0;
+        const page = res.products || [];
+        const all = accumulated.concat(page);
 
-        if (total === 0) {
-            callback([]);
-            return;
-        }
-
-        for (let i = 0; i < pages; i++) {
-            Admin.api("commerce.products.find", {
-                conditions: { producer: producerId },
-                fields: ["id", "code", "name", "department", "items"],
-                order: ["name"],
-                limit: PAGE_SIZE,
-                first: i * PAGE_SIZE
-            }, function(res) {
-                if (res.status === "ok") {
-                    res.products.forEach(function(p) { allProducts.push(p); });
-                }
-                completed++;
-                if (completed === pages) {
-                    allProducts.sort(function(a, b) {
-                        return (a.name || "").localeCompare(b.name || "", "it");
-                    });
-                    callback(allProducts);
-                }
-            });
+        if (page.length === PAGE_SIZE) {
+            // Potrebbero esserci altri — fetch pagina successiva
+            fetchPage(producerId, offset + PAGE_SIZE, all, callback);
+        } else {
+            callback(all);
         }
     });
 }
