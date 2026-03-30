@@ -37,7 +37,7 @@ export function setupProducersView() {
 
         if (!producerId) return;
 
-        tableContainer.innerHTML = '<p class="table-empty">Caricamento...</p>';
+        tableContainer.innerHTML = '<p class="table-empty">Caricamento... (id: ' + producerId + ')</p>';
 
         loadProducts(producerId, function(products) {
             currentProducts = products;
@@ -60,6 +60,10 @@ function loadProducts(producerId, callback) {
 }
 
 function fetchPage(producerId, offset, accumulated, callback) {
+    var dbg = document.getElementById("producer-table-container");
+    dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px'>fetchPage chiamato — id: "
+        + producerId + " offset: " + offset + "</pre>";
+
     Admin.api("commerce.products.find", {
         conditions: { producer: producerId },
         fields: ["id", "code", "name", "department", "items"],
@@ -69,7 +73,6 @@ function fetchPage(producerId, offset, accumulated, callback) {
     }, function(res) {
         // DEBUG TEMPORANEO — mostra risposta grezza nella pagina
         if (offset === 0) {
-            var dbg = document.getElementById("producer-table-container");
             dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px;overflow:auto'>"
                 + "producerId: " + producerId + " (tipo: " + typeof producerId + ")\n"
                 + JSON.stringify(res, null, 2)
