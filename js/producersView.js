@@ -61,37 +61,29 @@ function loadProducts(producerId, callback) {
 
 function fetchPage(producerId, offset, accumulated, callback) {
     var dbg = document.getElementById("producer-table-container");
-    dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px'>fetchPage chiamato — id: "
-        + producerId + " offset: " + offset + "</pre>";
 
+    // Test senza filtro per confronto
     Admin.api("commerce.products.find", {
-        conditions: { producer: producerId },
-        fields: ["id", "code", "name", "department", "items"],
-        order: ["name"],
-        limit: PAGE_SIZE,
-        first: offset
-    }, function(res) {
-        // DEBUG TEMPORANEO — mostra risposta grezza nella pagina
-        if (offset === 0) {
-            dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px;overflow:auto'>"
-                + "producerId: " + producerId + " (tipo: " + typeof producerId + ")\n"
+        fields: ["id", "producer"],
+        limit: 3,
+        first: 0
+    }, function(noFilterRes) {
+        Admin.api("commerce.products.find", {
+            conditions: { producer: producerId },
+            fields: ["id", "code", "name", "department", "items"],
+            order: ["name"],
+            limit: PAGE_SIZE,
+            first: offset
+        }, function(res) {
+            dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px;overflow:auto;max-height:400px'>"
+                + "=== SENZA FILTRO (primi 3 prodotti) ===\n"
+                + JSON.stringify(noFilterRes, null, 2)
+                + "\n\n=== CON FILTRO producer=" + producerId + " ===\n"
                 + JSON.stringify(res, null, 2)
                 + "</pre>";
-        }
 
-        if (res.status !== "ok") {
-            callback(accumulated);
-            return;
-        }
-
-        const page = res.products || [];
-        const all = accumulated.concat(page);
-
-        if (page.length === PAGE_SIZE) {
-            fetchPage(producerId, offset + PAGE_SIZE, all, callback);
-        } else {
-            callback(all);
-        }
+            // Non chiamare callback — mantieni il debug visibile
+        });
     });
 }
 
