@@ -93,12 +93,11 @@ function fetchPage(producerId, offset, accumulated, callback) {
 
         const page = res.products || [];
 
-        // DEBUG — mostra salePrice del primo prodotto
+        // DEBUG — mostra JSON completo del primo prodotto
         if (offset === 0 && page.length > 0) {
-            console.log("salePrice primo prodotto:", JSON.stringify(page[0].salePrice));
-            document.getElementById("producer-table-container").innerHTML +=
-                "<pre style='font-size:11px;background:#fffbe6;padding:8px;margin-bottom:8px'>"
-                + "salePrice[0]: " + JSON.stringify(page[0].salePrice) + "</pre>";
+            document.getElementById("producer-table-container").innerHTML =
+                "<pre style='font-size:11px;background:#fffbe6;padding:8px;overflow:auto;max-height:500px'>"
+                + JSON.stringify(page[0], null, 2) + "</pre>";
         }
 
         // Rileva il primo gruppo cliente disponibile dai prezzi
