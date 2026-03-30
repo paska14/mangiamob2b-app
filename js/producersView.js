@@ -5,6 +5,19 @@ let departmentMap = {};   // { id: name }
 let groupMap = {};        // { id: name }
 let activeGroupIds = [];  // group IDs con almeno un prezzo non-null nei prodotti caricati
 
+const ALL_PRODUCT_FIELDS = [
+    "id", "code", "sku",
+    "name", "shortDescription", "longDescription", "moreDescription",
+    "departments", "producer",
+    "isVisible", "isFeatured", "allowOrders", "allowQuotes", "showPrice", "isNewRelease",
+    "minOrder", "maxOrder", "minQuote",
+    "listPrice", "salePrice", "promotion",
+    "hasVariants", "variants",
+    "attributes",
+    "rating", "position", "releaseDate", "updateTime", "taxClass",
+    "seoTitle", "seoDescription"
+];
+
 export function setupProducersView() {
     if (typeof Admin === "undefined") return;
 
@@ -89,13 +102,15 @@ export function setupProducersView() {
     });
 }
 
-// Raccoglie tutti i group ID che hanno almeno un prezzo non-null tra i prodotti
+// Raccoglie tutti i group ID con almeno un prezzo non-null (listPrice o salePrice)
 function detectActiveGroups(products) {
     const seen = new Set();
     products.forEach(function(p) {
-        if (!p.salePrice) return;
-        Object.keys(p.salePrice).forEach(function(gid) {
-            if (p.salePrice[gid] != null) seen.add(gid);
+        [p.salePrice, p.listPrice].forEach(function(priceMap) {
+            if (!priceMap) return;
+            Object.keys(priceMap).forEach(function(gid) {
+                if (priceMap[gid] != null) seen.add(gid);
+            });
         });
     });
     return Array.from(seen).sort(function(a, b) { return Number(a) - Number(b); });
@@ -104,7 +119,7 @@ function detectActiveGroups(products) {
 function fetchPage(producerId, offset, accumulated, callback) {
     Admin.api("commerce.products.find", {
         conditions: { producer: producerId },
-        fields: ["id", "code", "name", "departments", "salePrice", "isVisible"],
+        fields: ALL_PRODUCT_FIELDS,
         order: ["name"],
         limit: PAGE_SIZE,
         first: offset
@@ -123,19 +138,23 @@ function fetchPage(producerId, offset, accumulated, callback) {
     });
 }
 
-function getDeptName(deptIds) {
+function getDeptNames(deptIds) {
     if (!deptIds || deptIds.length === 0) return "—";
-    return departmentMap[deptIds[0]] || ("ID " + deptIds[0]);
+    return deptIds.map(function(id) {
+        return departmentMap[id] || ("ID " + id);
+    }).join(", ");
 }
 
 function getGroupName(gid) {
     return groupMap[gid] || ("Gr." + gid);
 }
 
-function getPriceForGroup(salePrice, gid) {
-    if (!salePrice || salePrice[gid] == null) return "—";
-    return "€ " + Number(salePrice[gid]).toFixed(2);
+function getPriceForGroup(priceMap, gid) {
+    if (!priceMap || priceMap[gid] == null) return "—";
+    return "€ " + Number(priceMap[gid]).toFixed(2);
 }
+
+// --- Table (vista semplificata) ---
 
 function renderTable(products, container) {
     if (products.length === 0) {
@@ -155,7 +174,7 @@ function renderTable(products, container) {
         return "<tr>" +
             "<td>" + escapeHTML(toStr(p.code)) + "</td>" +
             "<td>" + escapeHTML(toStr(p.name)) + "</td>" +
-            "<td>" + escapeHTML(getDeptName(p.departments)) + "</td>" +
+            "<td>" + escapeHTML(getDeptNames(p.departments)) + "</td>" +
             priceCells +
             "<td>" + (p.isVisible ? "✓" : "—") + "</td>" +
             "</tr>";
@@ -172,20 +191,92 @@ function renderTable(products, container) {
         "</table>";
 }
 
+// --- CSV (tutti i campi) ---
+
 function downloadCSV(products, producerName) {
-    const groupHeaders = activeGroupIds.map(getGroupName);
-    const headers = ["Codice", "Nome", "Reparto"].concat(groupHeaders).concat(["Visibile"]);
+    const groupNames = activeGroupIds.map(getGroupName);
+
+    const listPriceHeaders  = groupNames.map(function(n) { return "Prezzo listino - " + n; });
+    const salePriceHeaders  = groupNames.map(function(n) { return "Prezzo vendita - " + n; });
+    const promotionHeaders  = groupNames.map(function(n) { return "Promozione ID - " + n; });
+
+    const headers = [
+        "ID", "Codice", "SKU",
+        "Nome", "Descrizione breve", "Descrizione lunga", "Descrizione aggiuntiva",
+        "Reparti", "Produttore ID",
+        "Visibile", "In evidenza", "Consenti ordini", "Consenti preventivi", "Mostra prezzo", "Novità",
+        "Qtà min ordine", "Qtà max ordine", "Qtà min preventivo",
+    ]
+    .concat(listPriceHeaders)
+    .concat(salePriceHeaders)
+    .concat(promotionHeaders)
+    .concat([
+        "Ha varianti", "N. varianti",
+        "Attributi",
+        "Rating", "Posizione", "Data uscita", "Ultima modifica", "Classe IVA",
+        "SEO Title", "SEO Description"
+    ]);
 
     const rows = products.map(function(p) {
-        const priceCells = activeGroupIds.map(function(gid) {
-            if (!p.salePrice || p.salePrice[gid] == null) return "";
-            return Number(p.salePrice[gid]).toFixed(2);
+        const listPriceCells = activeGroupIds.map(function(gid) {
+            return (p.listPrice && p.listPrice[gid] != null) ? Number(p.listPrice[gid]).toFixed(2) : "";
+        });
+        const salePriceCells = activeGroupIds.map(function(gid) {
+            return (p.salePrice && p.salePrice[gid] != null) ? Number(p.salePrice[gid]).toFixed(2) : "";
+        });
+        const promotionCells = activeGroupIds.map(function(gid) {
+            return (p.promotion && p.promotion[gid] != null) ? p.promotion[gid] : "";
         });
 
-        return [toStr(p.code), toStr(p.name), getDeptName(p.departments)]
-            .concat(priceCells)
-            .concat([p.isVisible ? "si" : "no"])
-            .map(csvCell).join(";");
+        const deptNames = (p.departments || []).map(function(id) {
+            return departmentMap[id] || ("ID " + id);
+        }).join(", ");
+
+        // Attributi: serializza come "attrId:valueId, ..."
+        const attrsStr = p.attributes
+            ? Object.entries(p.attributes).map(function(e) { return e[0] + ":" + e[1]; }).join(", ")
+            : "";
+
+        const variantsCount = Array.isArray(p.variants)
+            ? p.variants.filter(function(v) { return v != null; }).length
+            : "";
+
+        return [
+            p.id || "",
+            toStr(p.code),
+            toStr(p.sku),
+            toStr(p.name),
+            toStr(p.shortDescription),
+            toStr(p.longDescription),
+            toStr(p.moreDescription),
+            deptNames,
+            p.producer || "",
+            boolCell(p.isVisible),
+            boolCell(p.isFeatured),
+            boolCell(p.allowOrders),
+            boolCell(p.allowQuotes),
+            boolCell(p.showPrice),
+            boolCell(p.isNewRelease),
+            p.minOrder != null ? p.minOrder : "",
+            p.maxOrder != null ? p.maxOrder : "",
+            p.minQuote != null ? p.minQuote : "",
+        ]
+        .concat(listPriceCells)
+        .concat(salePriceCells)
+        .concat(promotionCells)
+        .concat([
+            boolCell(p.hasVariants),
+            variantsCount,
+            attrsStr,
+            p.rating != null ? p.rating : "",
+            p.position != null ? p.position : "",
+            p.releaseDate || "",
+            p.updateTime || "",
+            p.taxClass != null ? p.taxClass : "",
+            toStr(p.seoTitle),
+            toStr(p.seoDescription)
+        ])
+        .map(csvCell).join(";");
     });
 
     const csv = "\uFEFF" + headers.join(";") + "\n" + rows.join("\n");
@@ -196,6 +287,11 @@ function downloadCSV(products, producerName) {
     link.download = "prodotti_" + slugify(producerName) + ".csv";
     link.click();
     URL.revokeObjectURL(url);
+}
+
+function boolCell(val) {
+    if (val == null) return "";
+    return val ? "si" : "no";
 }
 
 function toStr(val) {
