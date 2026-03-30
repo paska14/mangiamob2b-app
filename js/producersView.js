@@ -67,6 +67,15 @@ function fetchPage(producerId, offset, accumulated, callback) {
         limit: PAGE_SIZE,
         first: offset
     }, function(res) {
+        // DEBUG TEMPORANEO — mostra risposta grezza nella pagina
+        if (offset === 0) {
+            var dbg = document.getElementById("producer-table-container");
+            dbg.innerHTML = "<pre style='font-size:11px;background:#f5f5f5;padding:10px;overflow:auto'>"
+                + "producerId: " + producerId + " (tipo: " + typeof producerId + ")\n"
+                + JSON.stringify(res, null, 2)
+                + "</pre>";
+        }
+
         if (res.status !== "ok") {
             callback(accumulated);
             return;
@@ -76,7 +85,6 @@ function fetchPage(producerId, offset, accumulated, callback) {
         const all = accumulated.concat(page);
 
         if (page.length === PAGE_SIZE) {
-            // Potrebbero esserci altri — fetch pagina successiva
             fetchPage(producerId, offset + PAGE_SIZE, all, callback);
         } else {
             callback(all);
