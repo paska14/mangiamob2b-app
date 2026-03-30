@@ -93,6 +93,14 @@ function fetchPage(producerId, offset, accumulated, callback) {
 
         const page = res.products || [];
 
+        // DEBUG — mostra salePrice del primo prodotto
+        if (offset === 0 && page.length > 0) {
+            console.log("salePrice primo prodotto:", JSON.stringify(page[0].salePrice));
+            document.getElementById("producer-table-container").innerHTML +=
+                "<pre style='font-size:11px;background:#fffbe6;padding:8px;margin-bottom:8px'>"
+                + "salePrice[0]: " + JSON.stringify(page[0].salePrice) + "</pre>";
+        }
+
         // Rileva il primo gruppo cliente disponibile dai prezzi
         if (firstGroupId === null) {
             page.forEach(function(p) {
