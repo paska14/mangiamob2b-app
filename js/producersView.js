@@ -279,7 +279,7 @@ function downloadCSV(products, producerName) {
         .map(csvCell).join(";");
     });
 
-    const csv = "\uFEFF" + headers.join(";") + "\n" + rows.join("\n");
+    const csv = "\uFEFF" + "sep=;\n" + headers.join(";") + "\n" + rows.join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -302,7 +302,7 @@ function toStr(val) {
 
 function csvCell(value) {
     const str = String(value);
-    if (str.includes(";") || str.includes('"') || str.includes("\n")) {
+    if (str.includes(";") || str.includes(",") || str.includes('"') || str.includes("\n")) {
         return '"' + str.replace(/"/g, '""') + '"';
     }
     return str;
