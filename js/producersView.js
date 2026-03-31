@@ -157,6 +157,7 @@ function fetchCostPrices(skus, offset, accumulated, callback) {
         limit: PAGE_SIZE,
         first: offset
     }, function(res) {
+        console.log("[fetchCostPrices] risposta API:", res);
         if (res.status !== "ok") {
             callback(accumulated);
             return;
