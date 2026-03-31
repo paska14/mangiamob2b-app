@@ -164,7 +164,7 @@ function fetchCostPrices(cursor, accumulated, callback) {
             callback(accumulated);
             return;
         }
-        const page = res.items || [];
+        const page = res.prices || [];
         page.forEach(function(ip) {
             if (ip.sku && ip.price != null) accumulated[ip.sku] = ip.price;
         });
