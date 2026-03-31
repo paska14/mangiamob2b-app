@@ -206,10 +206,14 @@ function renderTable(products, container) {
             return "<td>" + getPriceForGroup(p.salePrice, gid) + "</td>";
         }).join("");
 
+        const sku = toStr(p.sku);
+        const costPrice = costPriceMap[sku] != null ? "€ " + Number(costPriceMap[sku]).toFixed(2) : "—";
+
         return "<tr>" +
             "<td>" + escapeHTML(toStr(p.code)) + "</td>" +
             "<td>" + escapeHTML(toStr(p.name)) + "</td>" +
             "<td>" + escapeHTML(getDeptNames(p.departments)) + "</td>" +
+            "<td>" + costPrice + "</td>" +
             priceCells +
             "<td>" + (p.isVisible ? "✓" : "—") + "</td>" +
             "</tr>";
@@ -219,6 +223,7 @@ function renderTable(products, container) {
         '<table class="products-table">' +
             "<thead><tr>" +
                 "<th>Codice</th><th>Nome</th><th>Reparto</th>" +
+                "<th>Prezzo costo</th>" +
                 groupHeaders +
                 "<th>Visibile</th>" +
             "</tr></thead>" +
