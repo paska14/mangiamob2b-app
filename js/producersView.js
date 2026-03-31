@@ -1,6 +1,9 @@
 const PAGE_SIZE = 200;
 
+const COST_PRICE_LIST_ID = 2;
+
 let currentProducts = [];
+let costPriceMap = {};    // { sku: price }
 let departmentMap = {};   // { id: name }
 let groupMap = {};        // { id: name }
 let activeGroupIds = [];  // group IDs con almeno un prezzo non-null nei prodotti caricati
@@ -80,6 +83,7 @@ export function setupProducersView() {
         exportBtn.hidden = true;
         tableContainer.innerHTML = "";
         currentProducts = [];
+        costPriceMap = {};
         activeGroupIds = [];
 
         if (!producerId) return;
@@ -91,10 +95,15 @@ export function setupProducersView() {
             currentProducts = products;
             activeGroupIds = detectActiveGroups(products);
 
-            badge.textContent = products.length + " prodotti";
-            badge.hidden = false;
-            exportBtn.hidden = products.length === 0;
-            renderTable(products, tableContainer);
+            const skus = products.map(function(p) { return toStr(p.sku); }).filter(Boolean);
+            fetchCostPrices(skus, 0, {}, function(priceMap) {
+                console.log("[producersView] prezzi di costo (listino ID " + COST_PRICE_LIST_ID + "):", priceMap);
+                costPriceMap = priceMap;
+                badge.textContent = products.length + " prodotti";
+                badge.hidden = false;
+                exportBtn.hidden = products.length === 0;
+                renderTable(products, tableContainer);
+            });
         });
     });
 
@@ -137,6 +146,29 @@ function fetchPage(producerId, offset, accumulated, callback) {
             fetchPage(producerId, offset + PAGE_SIZE, all, callback);
         } else {
             callback(all);
+        }
+    });
+}
+
+function fetchCostPrices(skus, offset, accumulated, callback) {
+    Admin.api("commerce.item-prices.find", {
+        conditions: { list: COST_PRICE_LIST_ID },
+        fields: ["sku", "price"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (res.status !== "ok") {
+            callback(accumulated);
+            return;
+        }
+        const page = res.itemPrices || [];
+        page.forEach(function(ip) {
+            if (ip.sku && ip.price != null) accumulated[ip.sku] = ip.price;
+        });
+        if (page.length === PAGE_SIZE) {
+            fetchCostPrices(skus, offset + PAGE_SIZE, accumulated, callback);
+        } else {
+            callback(accumulated);
         }
     });
 }
@@ -209,7 +241,7 @@ function downloadCSV(products, producerName) {
         "Reparti", "Produttore ID",
         "Visibile", "In evidenza", "Consenti ordini", "Consenti preventivi", "Mostra prezzo", "Novità",
         "Qtà min ordine", "Qtà max ordine", "Qtà min preventivo",
-        "Ha prezzi a scaglioni",
+        "Prezzo di costo", "Ha prezzi a scaglioni",
     ]
     .concat(listPriceHeaders)
     .concat(salePriceHeaders)
@@ -266,6 +298,7 @@ function downloadCSV(products, producerName) {
             p.minOrder != null ? p.minOrder : "",
             p.maxOrder != null ? p.maxOrder : "",
             p.minQuote != null ? p.minQuote : "",
+            costPriceMap[toStr(p.sku)] != null ? Number(costPriceMap[toStr(p.sku)]).toFixed(2) : "",
             boolCell(p.hasMorePrices),
         ]
         .concat(listPriceCells)
