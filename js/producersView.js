@@ -153,7 +153,6 @@ function fetchPage(producerId, offset, accumulated, callback) {
 function fetchCostPrices(skus, offset, accumulated, callback) {
     Admin.api("commerce.item-prices.find", {
         conditions: { list: COST_PRICE_LIST_ID },
-        fields: ["sku", "price"],
         limit: PAGE_SIZE,
         first: offset
     }, function(res) {
