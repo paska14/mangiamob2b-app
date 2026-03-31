@@ -85,6 +85,7 @@ export function setupProducersView() {
         tableContainer.innerHTML = '<p class="table-empty">Caricamento...</p>';
 
         fetchPage(producerId, 0, [], function(products) {
+            console.log("[producersView] prodotti ricevuti:", products);
             currentProducts = products;
             activeGroupIds = detectActiveGroups(products);
 
