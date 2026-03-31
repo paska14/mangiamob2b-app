@@ -11,11 +11,13 @@ const ALL_PRODUCT_FIELDS = [
     "departments", "producer",
     "isVisible", "isFeatured", "allowOrders", "allowQuotes", "showPrice", "isNewRelease",
     "minOrder", "maxOrder", "minQuote",
-    "listPrice", "salePrice", "promotion",
+    "listPrice", "salePrice", "hasMorePrices", "promotion",
     "hasVariants", "variants",
-    "attributes",
+    "attributes", "attributesView",
     "rating", "position", "releaseDate", "updateTime", "taxClass",
-    "seoTitle", "seoDescription"
+    "seoTitle", "seoDescription", "canonicalURL",
+    "showRequestsFor", "infoForRequests", "showMoreGalleries",
+    "thumbnailImage", "smallImage", "mediumImage", "largeImage", "zoomImage"
 ];
 
 export function setupProducersView() {
@@ -207,15 +209,18 @@ function downloadCSV(products, producerName) {
         "Reparti", "Produttore ID",
         "Visibile", "In evidenza", "Consenti ordini", "Consenti preventivi", "Mostra prezzo", "Novità",
         "Qtà min ordine", "Qtà max ordine", "Qtà min preventivo",
+        "Ha prezzi a scaglioni",
     ]
     .concat(listPriceHeaders)
     .concat(salePriceHeaders)
     .concat(promotionHeaders)
     .concat([
         "Ha varianti", "N. varianti",
-        "Attributi",
+        "Attributi", "Attributi (vista)",
         "Rating", "Posizione", "Data uscita", "Ultima modifica", "Classe IVA",
-        "SEO Title", "SEO Description"
+        "SEO Title", "SEO Description", "URL Canonico",
+        "Mostra richieste per", "Info per richieste", "Mostra altre gallerie",
+        "Immagine thumbnail", "Immagine small", "Immagine medium", "Immagine large", "Immagine zoom"
     ]);
 
     const rows = products.map(function(p) {
@@ -261,6 +266,7 @@ function downloadCSV(products, producerName) {
             p.minOrder != null ? p.minOrder : "",
             p.maxOrder != null ? p.maxOrder : "",
             p.minQuote != null ? p.minQuote : "",
+            boolCell(p.hasMorePrices),
         ]
         .concat(listPriceCells)
         .concat(salePriceCells)
@@ -269,13 +275,23 @@ function downloadCSV(products, producerName) {
             boolCell(p.hasVariants),
             variantsCount,
             attrsStr,
+            p.attributesView ? JSON.stringify(p.attributesView) : "",
             p.rating != null ? p.rating : "",
             p.position != null ? p.position : "",
             p.releaseDate || "",
             p.updateTime || "",
             p.taxClass != null ? p.taxClass : "",
             toStr(p.seoTitle),
-            toStr(p.seoDescription)
+            toStr(p.seoDescription),
+            p.canonicalURL || "",
+            p.showRequestsFor != null ? p.showRequestsFor : "",
+            toStr(p.infoForRequests),
+            boolCell(p.showMoreGalleries),
+            p.thumbnailImage ? (p.thumbnailImage.url || "") : "",
+            p.smallImage ? (p.smallImage.url || "") : "",
+            p.mediumImage ? (p.mediumImage.url || "") : "",
+            p.largeImage ? (p.largeImage.url || "") : "",
+            p.zoomImage ? (p.zoomImage.url || "") : ""
         ])
         .map(csvCell).join(";");
     });
