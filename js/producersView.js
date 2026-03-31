@@ -96,7 +96,7 @@ export function setupProducersView() {
             activeGroupIds = detectActiveGroups(products);
 
             const skus = products.map(function(p) { return toStr(p.sku); }).filter(Boolean);
-            fetchCostPrices(skus, 0, {}, function(priceMap) {
+            fetchCostPrices(null, {}, function(priceMap) {
                 console.log("[producersView] prezzi di costo (listino ID " + COST_PRICE_LIST_ID + "):", priceMap);
                 costPriceMap = priceMap;
                 badge.textContent = products.length + " prodotti";
@@ -150,23 +150,27 @@ function fetchPage(producerId, offset, accumulated, callback) {
     });
 }
 
-function fetchCostPrices(skus, offset, accumulated, callback) {
+function fetchCostPrices(cursor, accumulated, callback) {
+    const conditions = { lists: [COST_PRICE_LIST_ID] };
+    if (cursor) {
+        conditions.after = cursor;
+    }
     Admin.api("commerce.item-prices.find", {
-        conditions: { list: COST_PRICE_LIST_ID },
-        limit: PAGE_SIZE,
-        first: offset
+        conditions: conditions,
+        limit: PAGE_SIZE
     }, function(res) {
         console.log("[fetchCostPrices] risposta API:", res);
         if (res.status !== "ok") {
             callback(accumulated);
             return;
         }
-        const page = res.itemPrices || [];
+        const page = res.items || [];
         page.forEach(function(ip) {
             if (ip.sku && ip.price != null) accumulated[ip.sku] = ip.price;
         });
         if (page.length === PAGE_SIZE) {
-            fetchCostPrices(skus, offset + PAGE_SIZE, accumulated, callback);
+            const last = page[page.length - 1];
+            fetchCostPrices({ sku: last.sku, list: last.list }, accumulated, callback);
         } else {
             callback(accumulated);
         }
