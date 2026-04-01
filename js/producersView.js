@@ -1,17 +1,25 @@
-const PAGE_SIZE = 200;
+export const PAGE_SIZE = 200;
 
-const COST_PRICE_LIST_ID = 2;
+export const COST_PRICE_LIST_ID = 2;
 
 let currentItems = [];    // flat array of items (one per SKU)
 let productMap = {};      // { productId: product }
-let producerMap = {};     // { producerId: name }
+export let producerMap = {};     // { producerId: name }
 let departmentMap = {};   // { id: name }
-let groupMap = {};        // { id: name }
+export let groupMap = {};        // { id: name }
 let attributeMap = {};    // { id: { name, values: { valueId: name } } }
-let valueAttrMap = {};    // { valueId: { attrName, valueName } }  — reverse lookup
+export let valueAttrMap = {};    // { valueId: { attrName, valueName } }  — reverse lookup
 let activeGroupIds = [];  // group IDs con almeno un prezzo non-null negli item caricati
 
-const PRODUCT_FIELDS = ["id", "code", "name", "departments", "producer", "isVisible"];
+export const PRODUCT_FIELDS = ["id", "code", "name", "departments", "producer", "isVisible", "mediumImage"];
+
+// Callbacks registrati da altri moduli da chiamare quando le mappe condivise sono pronte
+const onReadyCallbacks = [];
+let mapsReady = false;
+
+export function onSharedMapsReady(fn) {
+    if (mapsReady) { fn(); } else { onReadyCallbacks.push(fn); }
+}
 
 export function setupProducersView() {
     if (typeof Admin === "undefined") return;
@@ -31,6 +39,8 @@ export function setupProducersView() {
         if (!producersReady || !deptsReady || !groupsReady || !attrsReady) return;
         select.disabled = false;
         exportAllBtn.disabled = false;
+        mapsReady = true;
+        onReadyCallbacks.forEach(function(fn) { fn(); });
     }
 
     Admin.api("commerce.producers.find", { fields: ["id", "name"], order: ["name"] }, function(res) {
@@ -321,6 +331,7 @@ function downloadAllCSV(items, allProductMap, allActiveGroupIds) {
 }
 
 // Risolve item.options (array di value ID) in "Formato: 25cl | Confezione: 12 Pz"
+export
 function getItemOptionsText(options) {
     if (!options || options.length === 0) return "—";
     const grouped = {};
