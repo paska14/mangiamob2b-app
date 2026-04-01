@@ -61,9 +61,10 @@ export function setupCatalogView() {
             const productMapLocal = {};
             allProducts.forEach(function(p) { productMapLocal[p.id] = p; });
 
-            // Filtra item: isForSale + ha prezzo per il listino scelto
+            // Filtra item: prodotto visibile + isForSale + ha prezzo per il listino scelto
             const filtered = allItems.filter(function(item) {
-                return item.isForSale && item.price && item.price[listId] != null;
+                const product = productMapLocal[item.product];
+                return product && product.isVisible && item.isForSale && item.price && item.price[listId] != null;
             });
 
             console.log("[catalog] item filtrati:", filtered.length);
