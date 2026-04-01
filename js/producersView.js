@@ -78,19 +78,23 @@ export function setupProducersView() {
         onReady();
     });
 
-    Admin.api("commerce.attributes.find", {}, function(res) {
-        console.log("[attributes] risposta API:", JSON.stringify(res).slice(0, 1000));
+    Admin.api("commerce.attributes.find", { fields: ["id", "name"] }, function(res) {
         if (res.status === "ok") {
             (res.attributes || []).forEach(function(attr) {
-                const valuesMap = {};
-                (attr.values || []).forEach(function(v) {
-                    valuesMap[v.id] = toStr(v.name);
-                });
-                attributeMap[attr.id] = { name: toStr(attr.name), values: valuesMap };
+                attributeMap[attr.id] = { name: toStr(attr.name), values: {} };
             });
         }
-        attrsReady = true;
-        onReady();
+        Admin.api("commerce.attribute-values.find", { fields: ["id", "attribute", "name"], limit: 500 }, function(res2) {
+            if (res2.status === "ok") {
+                (res2.values || []).forEach(function(v) {
+                    if (attributeMap[v.attribute]) {
+                        attributeMap[v.attribute].values[v.id] = toStr(v.name);
+                    }
+                });
+            }
+            attrsReady = true;
+            onReady();
+        });
     });
 
     select.addEventListener("change", function() {
