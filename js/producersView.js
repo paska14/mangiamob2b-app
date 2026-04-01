@@ -147,6 +147,7 @@ export function setupProducersView() {
     });
 
     exportAllBtn.addEventListener("click", function() {
+        console.log("[exportAll] click");
         exportAllBtn.disabled = true;
         exportAllBtn.textContent = "Caricamento...";
 
@@ -154,6 +155,7 @@ export function setupProducersView() {
         let allItems = null;
 
         function onAllLoaded() {
+            console.log("[exportAll] onAllLoaded chiamato — products:", allProducts !== null, "| items:", allItems !== null);
             if (allProducts === null || allItems === null) return;
             console.log("[exportAll] prodotti:", allProducts.length, "| item:", allItems.length);
 
