@@ -4,15 +4,14 @@ const COST_PRICE_LIST_ID = 2;
 
 let currentItems = [];    // flat array of items (one per SKU)
 let productMap = {};      // { productId: product }
+let producerMap = {};     // { producerId: name }
 let departmentMap = {};   // { id: name }
 let groupMap = {};        // { id: name }
 let attributeMap = {};    // { id: { name, values: { valueId: name } } }
 let valueAttrMap = {};    // { valueId: { attrName, valueName } }  — reverse lookup
 let activeGroupIds = [];  // group IDs con almeno un prezzo non-null negli item caricati
 
-const PRODUCT_FIELDS = [
-    "id", "code", "name", "departments", "producer", "isVisible"
-];
+const PRODUCT_FIELDS = ["id", "code", "name", "departments", "producer", "isVisible"];
 
 export function setupProducersView() {
     if (typeof Admin === "undefined") return;
@@ -20,6 +19,7 @@ export function setupProducersView() {
     const select = document.getElementById("producer-select");
     const badge = document.getElementById("producer-count-badge");
     const exportBtn = document.getElementById("export-csv-btn");
+    const exportAllBtn = document.getElementById("export-all-btn");
     const tableContainer = document.getElementById("producer-table-container");
 
     let producersReady = false;
@@ -30,6 +30,7 @@ export function setupProducersView() {
     function onReady() {
         if (!producersReady || !deptsReady || !groupsReady || !attrsReady) return;
         select.disabled = false;
+        exportAllBtn.disabled = false;
     }
 
     Admin.api("commerce.producers.find", { fields: ["id", "name"], order: ["name"] }, function(res) {
@@ -38,6 +39,7 @@ export function setupProducersView() {
         } else {
             select.innerHTML = '<option value="">— seleziona un produttore —</option>';
             res.producers.forEach(function(p) {
+                producerMap[p.id] = toStr(p.name);
                 const opt = document.createElement("option");
                 opt.value = p.id;
                 opt.textContent = toStr(p.name);
@@ -143,6 +145,40 @@ export function setupProducersView() {
         const producerName = select.options[select.selectedIndex].textContent;
         downloadCSV(currentItems, producerName);
     });
+
+    exportAllBtn.addEventListener("click", function() {
+        exportAllBtn.disabled = true;
+        exportAllBtn.textContent = "Caricamento...";
+
+        let allProducts = null;
+        let allItems = null;
+
+        function onAllLoaded() {
+            if (allProducts === null || allItems === null) return;
+            console.log("[exportAll] prodotti:", allProducts.length, "| item:", allItems.length);
+
+            const allProductMap = {};
+            allProducts.forEach(function(p) { allProductMap[p.id] = p; });
+
+            const allActiveGroupIds = detectActiveGroupIds(allItems);
+            downloadAllCSV(allItems, allProductMap, allActiveGroupIds);
+
+            exportAllBtn.disabled = false;
+            exportAllBtn.textContent = "Esporta tutto";
+        }
+
+        fetchAllProductsPage(0, [], function(prods) {
+            console.log("[exportAll] fetchAllProducts:", prods.length);
+            allProducts = prods;
+            onAllLoaded();
+        });
+
+        fetchAllItemsPage(0, [], function(itms) {
+            console.log("[exportAll] fetchAllItems:", itms.length);
+            allItems = itms;
+            onAllLoaded();
+        });
+    });
 }
 
 // Raccoglie i group ID (escluso listino costo) con almeno un prezzo non-null negli item
@@ -196,6 +232,90 @@ function fetchItemsPage(producerId, offset, accumulated, callback) {
             callback(all);
         }
     });
+}
+
+function fetchAllProductsPage(offset, accumulated, callback) {
+    Admin.api("commerce.products.find", {
+        fields: PRODUCT_FIELDS,
+        order: ["name"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (res.status !== "ok") { callback(accumulated); return; }
+        const page = res.products || [];
+        const all = accumulated.concat(page);
+        if (page.length === PAGE_SIZE) {
+            fetchAllProductsPage(offset + PAGE_SIZE, all, callback);
+        } else {
+            callback(all);
+        }
+    });
+}
+
+function fetchAllItemsPage(offset, accumulated, callback) {
+    Admin.api("commerce.items.find", {
+        fields: ["sku", "product", "options", "price", "isForSale", "stock"],
+        order: ["product", "sku"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (offset === 0) console.log("[fetchAllItems] status:", res.status, res.status !== "ok" ? "| error: " + JSON.stringify(res.error) : "| prima pagina: " + (res.items || []).length);
+        if (res.status !== "ok") { callback(accumulated); return; }
+        const page = res.items || [];
+        const all = accumulated.concat(page);
+        if (page.length === PAGE_SIZE) {
+            fetchAllItemsPage(offset + PAGE_SIZE, all, callback);
+        } else {
+            callback(all);
+        }
+    });
+}
+
+function downloadAllCSV(items, allProductMap, allActiveGroupIds) {
+    const groupNames = allActiveGroupIds.map(getGroupName);
+    const priceHeaders = groupNames.map(function(n) { return "Prezzo - " + n; });
+
+    const headers = [
+        "Produttore", "Codice prodotto", "Nome prodotto", "SKU", "Reparto",
+        "Variante", "Prezzo costo",
+    ].concat(priceHeaders).concat(["Vendibile", "Stock"]);
+
+    const rows = items.map(function(item) {
+        const product = allProductMap[item.product] || {};
+        const producerName = product.producer ? (producerMap[product.producer] || ("ID " + product.producer)) : "—";
+
+        const priceCells = allActiveGroupIds.map(function(gid) {
+            return (item.price && item.price[gid] != null) ? Number(item.price[gid]).toFixed(2) : "";
+        });
+
+        const costPrice = (item.price && item.price[COST_PRICE_LIST_ID] != null)
+            ? Number(item.price[COST_PRICE_LIST_ID]).toFixed(2) : "";
+
+        return [
+            producerName,
+            toStr(product.code),
+            toStr(product.name),
+            toStr(item.sku),
+            getDeptNames(product.departments),
+            getItemOptionsText(item.options),
+            costPrice,
+        ]
+        .concat(priceCells)
+        .concat([
+            boolCell(item.isForSale),
+            item.stock != null ? item.stock : ""
+        ])
+        .map(csvCell).join(";");
+    });
+
+    const csv = "\uFEFF" + "sep=;\n" + headers.join(";") + "\n" + rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "varianti_tutti.csv";
+    link.click();
+    URL.revokeObjectURL(url);
 }
 
 // Risolve item.options (array di value ID) in "Formato: 25cl | Confezione: 12 Pz"
