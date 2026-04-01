@@ -6,6 +6,7 @@ let currentProducts = [];
 let costPriceMap = {};    // { sku: price }
 let departmentMap = {};   // { id: name }
 let groupMap = {};        // { id: name }
+let attributeMap = {};    // { id: { name, values: { valueId: name } } }
 let activeGroupIds = [];  // group IDs con almeno un prezzo non-null nei prodotti caricati
 
 const ALL_PRODUCT_FIELDS = [
@@ -34,9 +35,10 @@ export function setupProducersView() {
     let producersReady = false;
     let deptsReady = false;
     let groupsReady = false;
+    let attrsReady = false;
 
     function onReady() {
-        if (!producersReady || !deptsReady || !groupsReady) return;
+        if (!producersReady || !deptsReady || !groupsReady || !attrsReady) return;
         select.disabled = false;
     }
 
@@ -73,6 +75,20 @@ export function setupProducersView() {
             });
         }
         groupsReady = true;
+        onReady();
+    });
+
+    Admin.api("commerce.attributes.find", { fields: ["id", "name", "values"] }, function(res) {
+        if (res.status === "ok") {
+            (res.attributes || []).forEach(function(attr) {
+                const valuesMap = {};
+                (attr.values || []).forEach(function(v) {
+                    valuesMap[v.id] = toStr(v.name);
+                });
+                attributeMap[attr.id] = { name: toStr(attr.name), values: valuesMap };
+            });
+        }
+        attrsReady = true;
         onReady();
     });
 
@@ -177,6 +193,26 @@ function fetchCostPrices(cursor, accumulated, callback) {
     });
 }
 
+// Restituisce le opzioni variante come "Taglia: S, M, L | Colore: Rosso, Blu"
+// variants = [attrId, attrId, null, ...]
+// attributes = { attrId: [valueId, ...] }
+function getVariantOptionsText(product) {
+    if (!product.hasVariants) return "—";
+    const variantAttrIds = (product.variants || []).filter(function(v) { return v != null; });
+    if (variantAttrIds.length === 0) return "—";
+
+    const parts = variantAttrIds.map(function(attrId) {
+        const attr = attributeMap[attrId];
+        const attrName = attr ? attr.name : ("Attr " + attrId);
+        const valueIds = product.attributes ? (product.attributes[attrId] || []) : [];
+        const valueNames = valueIds.map(function(vid) {
+            return (attr && attr.values[vid]) ? attr.values[vid] : ("Val " + vid);
+        });
+        return attrName + ": " + (valueNames.length ? valueNames.join(", ") : "—");
+    });
+    return parts.join(" | ");
+}
+
 function getDeptNames(deptIds) {
     if (!deptIds || deptIds.length === 0) return "—";
     return deptIds.map(function(id) {
@@ -217,6 +253,7 @@ function renderTable(products, container) {
             "<td>" + escapeHTML(toStr(p.code)) + "</td>" +
             "<td>" + escapeHTML(toStr(p.name)) + "</td>" +
             "<td>" + escapeHTML(getDeptNames(p.departments)) + "</td>" +
+            "<td>" + escapeHTML(getVariantOptionsText(p)) + "</td>" +
             "<td>" + costPrice + "</td>" +
             priceCells +
             "<td>" + (p.isVisible ? "✓" : "—") + "</td>" +
@@ -227,6 +264,7 @@ function renderTable(products, container) {
         '<table class="products-table">' +
             "<thead><tr>" +
                 "<th>Codice</th><th>Nome</th><th>Reparto</th>" +
+                "<th>Varianti</th>" +
                 "<th>Prezzo costo</th>" +
                 groupHeaders +
                 "<th>Visibile</th>" +
