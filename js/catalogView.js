@@ -153,7 +153,7 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
         ? "Catalogo " + producerName + " — " + listName
         : "Catalogo — " + listName;
 
-    const rows = productOrder.map(function(pid) {
+    const cards = productOrder.map(function(pid) {
         const product = productMap[pid] || {};
         const items   = grouped[pid];
         const imgUrl  = product.mediumImage ? product.mediumImage.url : null;
@@ -164,20 +164,20 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
         const itemRows = items.map(function(item) {
             const price   = "€ " + Number(item.price[listId]).toFixed(2);
             const options = getItemOptionsText(item.options);
-            const parts   = ["SKU: " + escapeHTML(item.sku)];
+            const parts   = [];
             if (options !== "—") parts.push(escapeHTML(options));
             parts.push('<strong>' + escapeHTML(price) + '</strong>');
-            return '<div class="item-row">' + parts.join(' &nbsp;|&nbsp; ') + '</div>';
+            return '<div class="item-row">' +
+                '<span class="item-sku">SKU: ' + escapeHTML(item.sku) + '</span>' +
+                (parts.length ? ' <span class="item-detail">' + parts.join(' &nbsp;|&nbsp; ') + '</span>' : '') +
+            '</div>';
         }).join("");
 
-        return '<div class="product-entry">' +
+        return '<div class="product-card">' +
             '<div class="prod-img-cell">' + imgTag + '</div>' +
-            '<div class="prod-info">' +
-                '<div class="prod-name">' + escapeHTML(toStr(product.name)) +
-                    '<span class="prod-code">Cod: ' + escapeHTML(toStr(product.code)) + '</span>' +
-                '</div>' +
-                '<div class="prod-items">' + itemRows + '</div>' +
-            '</div>' +
+            '<div class="prod-name">' + escapeHTML(toStr(product.name)) + '</div>' +
+            '<div class="prod-code">Cod: ' + escapeHTML(toStr(product.code)) + '</div>' +
+            '<div class="prod-items">' + itemRows + '</div>' +
         '</div>';
     }).join("");
 
@@ -194,7 +194,7 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
             '<h2>' + escapeHTML(listName) + (producerName ? ' — ' + escapeHTML(producerName) : '') + '</h2>' +
             '<p class="catalog-date">Data: ' + today + '</p>' +
         '</div>' +
-        '<div class="catalog-body">' + rows + '</div>' +
+        '<div class="catalog-body">' + cards + '</div>' +
         '</body></html>';
 
     const win = window.open("", "_blank");
@@ -218,37 +218,49 @@ function catalogCSS() {
             border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
         }
 
-        .catalog-title { padding: 20px 20px 10px; border-bottom: 2px solid #222; }
+        .catalog-title { padding: 20px 20px 12px; border-bottom: 2px solid #222; margin-bottom: 16px; }
         .catalog-title h1 { font-size: 20px; }
         .catalog-title h2 { font-size: 14px; font-weight: normal; margin-top: 4px; color: #444; }
         .catalog-date { font-size: 10px; color: #888; margin-top: 4px; }
 
-        .catalog-body { padding: 10px 20px; }
-
-        .product-entry {
-            display: flex; align-items: flex-start; gap: 12px;
-            padding: 8px 0; border-bottom: 1px solid #e0e0e0;
-            page-break-inside: avoid;
+        .catalog-body {
+            padding: 0 20px 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
         }
 
-        .prod-img-cell { flex: 0 0 60px; }
-        .prod-img { width: 60px; height: 60px; object-fit: contain; border: 1px solid #eee; }
-        .prod-img-placeholder { width: 60px; height: 60px; background: #f5f5f5; border: 1px solid #eee; }
+        .product-card {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
 
-        .prod-info { flex: 1; }
-        .prod-name { font-weight: bold; font-size: 12px; margin-bottom: 4px; }
-        .prod-code { font-weight: normal; font-size: 10px; color: #666; margin-left: 10px; }
+        .prod-img-cell { text-align: center; }
+        .prod-img { width: 100%; max-height: 120px; object-fit: contain; }
+        .prod-img-placeholder { width: 100%; height: 100px; background: #f5f5f5; border: 1px solid #eee; }
 
-        .item-row { font-size: 10px; color: #333; margin-top: 2px; }
-        .item-row strong { color: #111; }
+        .prod-name { font-weight: bold; font-size: 11px; line-height: 1.3; }
+        .prod-code { font-size: 10px; color: #888; }
+
+        .prod-items { margin-top: 4px; border-top: 1px solid #eee; padding-top: 4px; }
+        .item-row { font-size: 10px; color: #444; margin-top: 3px; display: flex; justify-content: space-between; gap: 6px; }
+        .item-sku { color: #888; flex-shrink: 0; }
+        .item-detail { text-align: right; }
+        .item-detail strong { color: #111; }
 
         @media print {
-            @page { size: A4; margin: 15mm 12mm; }
+            @page { size: A4; margin: 12mm 10mm; }
             .no-print { display: none !important; }
             body { font-size: 10px; }
-            .catalog-title { padding: 0 0 8px; }
-            .catalog-body { padding: 0; }
-            .product-entry { padding: 5px 0; }
+            .catalog-title { padding: 0 0 8px; margin-bottom: 10px; }
+            .catalog-body { padding: 0; gap: 10px; }
+            .product-card { padding: 6px; gap: 4px; }
+            .prod-img { max-height: 90px; }
         }
     `;
 }
