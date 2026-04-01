@@ -226,7 +226,7 @@ function catalogCSS() {
         .catalog-body {
             padding: 0 20px 20px;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
         }
 
