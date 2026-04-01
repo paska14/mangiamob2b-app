@@ -69,12 +69,14 @@ export function setupProducersView() {
     });
 
     Admin.api("commerce.attributes.find", { fields: ["id", "name"] }, function(res) {
+        console.log("[attributes.find] status:", res.status, "| count:", (res.attributes || []).length);
         if (res.status === "ok") {
             (res.attributes || []).forEach(function(attr) {
                 attributeMap[attr.id] = { name: toStr(attr.name), values: {} };
             });
         }
         Admin.api("commerce.attribute-values.find", { fields: ["id", "attribute", "name"], limit: 500 }, function(res2) {
+            console.log("[attribute-values.find] status:", res2.status, "| count:", (res2.values || []).length);
             if (res2.status === "ok") {
                 (res2.values || []).forEach(function(v) {
                     if (attributeMap[v.attribute]) {
@@ -111,9 +113,11 @@ export function setupProducersView() {
         function onBothLoaded() {
             if (products === null || items === null) return;
 
+            console.log("[onBothLoaded] prodotti:", products.length, "| item:", items.length);
             products.forEach(function(p) { productMap[p.id] = p; });
             currentItems = items;
             activeGroupIds = detectActiveGroupIds(items);
+            console.log("[onBothLoaded] activeGroupIds:", activeGroupIds);
 
             badge.textContent = items.length + " varianti";
             badge.hidden = false;
@@ -122,11 +126,13 @@ export function setupProducersView() {
         }
 
         fetchProductsPage(producerId, 0, [], function(prods) {
+            console.log("[fetchProductsPage] prodotti ricevuti:", prods.length);
             products = prods;
             onBothLoaded();
         });
 
         fetchItemsPage(producerId, 0, [], function(itms) {
+            console.log("[fetchItemsPage] item ricevuti:", itms.length);
             items = itms;
             onBothLoaded();
         });
@@ -180,6 +186,7 @@ function fetchItemsPage(producerId, offset, accumulated, callback) {
         limit: PAGE_SIZE,
         first: offset
     }, function(res) {
+        if (offset === 0) console.log("[items.find] status:", res.status, res.status !== "ok" ? "| error: " + JSON.stringify(res.error) : "| items ricevuti prima pagina: " + (res.items || []).length);
         if (res.status !== "ok") { callback(accumulated); return; }
         const page = res.items || [];
         const all = accumulated.concat(page);
