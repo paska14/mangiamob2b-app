@@ -78,8 +78,8 @@ export function setupProducersView() {
         onReady();
     });
 
-    Admin.api("commerce.attributes.find", { fields: ["id", "name", "values"] }, function(res) {
-        console.log("[attributes] risposta API:", JSON.stringify(res).slice(0, 500));
+    Admin.api("commerce.attributes.find", {}, function(res) {
+        console.log("[attributes] risposta API:", JSON.stringify(res).slice(0, 1000));
         if (res.status === "ok") {
             (res.attributes || []).forEach(function(attr) {
                 const valuesMap = {};
