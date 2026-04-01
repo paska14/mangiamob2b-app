@@ -2,26 +2,16 @@ const PAGE_SIZE = 200;
 
 const COST_PRICE_LIST_ID = 2;
 
-let currentProducts = [];
-let costPriceMap = {};    // { sku: price }
+let currentItems = [];    // flat array of items (one per SKU)
+let productMap = {};      // { productId: product }
 let departmentMap = {};   // { id: name }
 let groupMap = {};        // { id: name }
 let attributeMap = {};    // { id: { name, values: { valueId: name } } }
-let activeGroupIds = [];  // group IDs con almeno un prezzo non-null nei prodotti caricati
+let valueAttrMap = {};    // { valueId: { attrName, valueName } }  — reverse lookup
+let activeGroupIds = [];  // group IDs con almeno un prezzo non-null negli item caricati
 
-const ALL_PRODUCT_FIELDS = [
-    "id", "code", "sku",
-    "name", "shortDescription", "longDescription", "moreDescription",
-    "departments", "producer",
-    "isVisible", "isFeatured", "allowOrders", "allowQuotes", "showPrice", "isNewRelease",
-    "minOrder", "maxOrder", "minQuote",
-    "listPrice", "salePrice", "hasMorePrices", "promotion",
-    "hasVariants", "variants",
-    "attributes", "attributesView",
-    "rating", "position", "releaseDate", "updateTime", "taxClass",
-    "seoTitle", "seoDescription", "canonicalURL",
-    "showRequestsFor", "infoForRequests", "showMoreGalleries",
-    "thumbnailImage", "smallImage", "mediumImage", "largeImage", "zoomImage"
+const PRODUCT_FIELDS = [
+    "id", "code", "name", "departments", "producer", "isVisible"
 ];
 
 export function setupProducersView() {
@@ -90,6 +80,10 @@ export function setupProducersView() {
                     if (attributeMap[v.attribute]) {
                         attributeMap[v.attribute].values[v.id] = toStr(v.name);
                     }
+                    valueAttrMap[v.id] = {
+                        attrName: attributeMap[v.attribute] ? attributeMap[v.attribute].name : ("Attr " + v.attribute),
+                        valueName: toStr(v.name)
+                    };
                 });
             }
             attrsReady = true;
@@ -103,119 +97,114 @@ export function setupProducersView() {
         badge.hidden = true;
         exportBtn.hidden = true;
         tableContainer.innerHTML = "";
-        currentProducts = [];
-        costPriceMap = {};
+        currentItems = [];
+        productMap = {};
         activeGroupIds = [];
 
         if (!producerId) return;
 
         tableContainer.innerHTML = '<p class="table-empty">Caricamento...</p>';
 
-        fetchPage(producerId, 0, [], function(products) {
-            console.log("[producersView] prodotti ricevuti:", products);
-            currentProducts = products;
-            activeGroupIds = detectActiveGroups(products);
+        let products = null;
+        let items = null;
 
-            const skus = products.map(function(p) { return toStr(p.sku); }).filter(Boolean);
-            fetchCostPrices(null, {}, function(priceMap) {
-                console.log("[producersView] prezzi di costo (listino ID " + COST_PRICE_LIST_ID + "):", priceMap);
-                costPriceMap = priceMap;
-                badge.textContent = products.length + " prodotti";
-                badge.hidden = false;
-                exportBtn.hidden = products.length === 0;
-                renderTable(products, tableContainer);
-            });
+        function onBothLoaded() {
+            if (products === null || items === null) return;
+
+            products.forEach(function(p) { productMap[p.id] = p; });
+            currentItems = items;
+            activeGroupIds = detectActiveGroupIds(items);
+
+            badge.textContent = items.length + " varianti";
+            badge.hidden = false;
+            exportBtn.hidden = items.length === 0;
+            renderTable(items, tableContainer);
+        }
+
+        fetchProductsPage(producerId, 0, [], function(prods) {
+            products = prods;
+            onBothLoaded();
+        });
+
+        fetchItemsPage(producerId, 0, [], function(itms) {
+            items = itms;
+            onBothLoaded();
         });
     });
 
     exportBtn.addEventListener("click", function() {
-        if (currentProducts.length === 0) return;
+        if (currentItems.length === 0) return;
         const producerName = select.options[select.selectedIndex].textContent;
-        downloadCSV(currentProducts, producerName);
+        downloadCSV(currentItems, producerName);
     });
 }
 
-// Raccoglie tutti i group ID con almeno un prezzo non-null (listPrice o salePrice)
-function detectActiveGroups(products) {
+// Raccoglie i group ID (escluso listino costo) con almeno un prezzo non-null negli item
+function detectActiveGroupIds(items) {
     const seen = new Set();
-    products.forEach(function(p) {
-        [p.salePrice, p.listPrice].forEach(function(priceMap) {
-            if (!priceMap) return;
-            Object.keys(priceMap).forEach(function(gid) {
-                if (priceMap[gid] != null) seen.add(gid);
-            });
+    items.forEach(function(item) {
+        if (!item.price) return;
+        Object.keys(item.price).forEach(function(lid) {
+            if (parseInt(lid) !== COST_PRICE_LIST_ID && groupMap[lid] && item.price[lid] != null) {
+                seen.add(lid);
+            }
         });
     });
     return Array.from(seen).sort(function(a, b) { return Number(a) - Number(b); });
 }
 
-function fetchPage(producerId, offset, accumulated, callback) {
+function fetchProductsPage(producerId, offset, accumulated, callback) {
     Admin.api("commerce.products.find", {
         conditions: { producer: producerId },
-        fields: ALL_PRODUCT_FIELDS,
+        fields: PRODUCT_FIELDS,
         order: ["name"],
         limit: PAGE_SIZE,
         first: offset
     }, function(res) {
-        if (res.status !== "ok") {
-            callback(accumulated);
-            return;
-        }
+        if (res.status !== "ok") { callback(accumulated); return; }
         const page = res.products || [];
         const all = accumulated.concat(page);
         if (page.length === PAGE_SIZE) {
-            fetchPage(producerId, offset + PAGE_SIZE, all, callback);
+            fetchProductsPage(producerId, offset + PAGE_SIZE, all, callback);
         } else {
             callback(all);
         }
     });
 }
 
-function fetchCostPrices(cursor, accumulated, callback) {
-    const conditions = { lists: [COST_PRICE_LIST_ID] };
-    if (cursor) {
-        conditions.after = cursor;
-    }
-    Admin.api("commerce.item-prices.find", {
-        conditions: conditions,
-        limit: PAGE_SIZE
+function fetchItemsPage(producerId, offset, accumulated, callback) {
+    Admin.api("commerce.items.find", {
+        conditions: { producer: producerId },
+        fields: ["sku", "product", "options", "price", "isForSale", "stock"],
+        order: ["product", "sku"],
+        limit: PAGE_SIZE,
+        first: offset
     }, function(res) {
-        console.log("[fetchCostPrices] risposta API:", res);
-        if (res.status !== "ok") {
-            callback(accumulated);
-            return;
-        }
-        const page = res.prices || [];
-        page.forEach(function(ip) {
-            if (ip.sku && ip.price != null) accumulated[ip.sku] = ip.price;
-        });
+        if (res.status !== "ok") { callback(accumulated); return; }
+        const page = res.items || [];
+        const all = accumulated.concat(page);
         if (page.length === PAGE_SIZE) {
-            const last = page[page.length - 1];
-            fetchCostPrices({ sku: last.sku, list: last.list }, accumulated, callback);
+            fetchItemsPage(producerId, offset + PAGE_SIZE, all, callback);
         } else {
-            callback(accumulated);
+            callback(all);
         }
     });
 }
 
-// Restituisce le opzioni variante come "Taglia: S, M, L | Colore: Rosso, Blu"
-// variants = [attrId, attrId, null, ...]
-// attributes = { attrId: [valueId, ...] }
-function getVariantOptionsText(product) {
-    if (!product.hasVariants) return "—";
-    const variantAttrIds = (product.variants || []).filter(function(v) { return v != null; });
-    if (variantAttrIds.length === 0) return "—";
-
-    const parts = variantAttrIds.map(function(attrId) {
-        const attr = attributeMap[attrId];
-        const attrName = attr ? attr.name : ("Attr " + attrId);
-        const valueIds = product.attributes ? (product.attributes[attrId] || []) : [];
-        const valueNames = valueIds.map(function(vid) {
-            return (attr && attr.values[vid]) ? attr.values[vid] : ("Val " + vid);
-        });
-        return attrName + ": " + (valueNames.length ? valueNames.join(", ") : "—");
+// Risolve item.options (array di value ID) in "Formato: 25cl | Confezione: 12 Pz"
+function getItemOptionsText(options) {
+    if (!options || options.length === 0) return "—";
+    const grouped = {};
+    options.forEach(function(vid) {
+        const info = valueAttrMap[vid];
+        if (!info) return;
+        if (!grouped[info.attrName]) grouped[info.attrName] = [];
+        grouped[info.attrName].push(info.valueName);
     });
-    return parts.join(" | ");
+    const parts = Object.keys(grouped).map(function(attrName) {
+        return attrName + ": " + grouped[attrName].join(", ");
+    });
+    return parts.length ? parts.join(" | ") : "—";
 }
 
 function getDeptNames(deptIds) {
@@ -229,16 +218,16 @@ function getGroupName(gid) {
     return groupMap[gid] || ("Gr." + gid);
 }
 
-function getPriceForGroup(priceMap, gid) {
-    if (!priceMap || priceMap[gid] == null) return "—";
-    return "€ " + Number(priceMap[gid]).toFixed(2);
+function getItemPrice(item, listId) {
+    if (!item.price || item.price[listId] == null) return "—";
+    return "€ " + Number(item.price[listId]).toFixed(2);
 }
 
-// --- Table (vista semplificata) ---
+// --- Table ---
 
-function renderTable(products, container) {
-    if (products.length === 0) {
-        container.innerHTML = '<p class="table-empty">Nessun prodotto trovato.</p>';
+function renderTable(items, container) {
+    if (items.length === 0) {
+        container.innerHTML = '<p class="table-empty">Nessun articolo trovato.</p>';
         return;
     }
 
@@ -246,137 +235,71 @@ function renderTable(products, container) {
         return "<th>" + escapeHTML(getGroupName(gid)) + "</th>";
     }).join("");
 
-    const rows = products.map(function(p) {
+    const rows = items.map(function(item) {
+        const product = productMap[item.product] || {};
+
         const priceCells = activeGroupIds.map(function(gid) {
-            return "<td>" + getPriceForGroup(p.salePrice, gid) + "</td>";
+            return "<td>" + getItemPrice(item, gid) + "</td>";
         }).join("");
 
-        const sku = toStr(p.sku);
-        const costPrice = costPriceMap[sku] != null ? "€ " + Number(costPriceMap[sku]).toFixed(2) : "—";
-
         return "<tr>" +
-            "<td>" + escapeHTML(toStr(p.code)) + "</td>" +
-            "<td>" + escapeHTML(toStr(p.name)) + "</td>" +
-            "<td>" + escapeHTML(getDeptNames(p.departments)) + "</td>" +
-            "<td>" + escapeHTML(getVariantOptionsText(p)) + "</td>" +
-            "<td>" + costPrice + "</td>" +
+            "<td>" + escapeHTML(toStr(product.code)) + "</td>" +
+            "<td>" + escapeHTML(toStr(product.name)) + "</td>" +
+            "<td>" + escapeHTML(toStr(item.sku)) + "</td>" +
+            "<td>" + escapeHTML(getDeptNames(product.departments)) + "</td>" +
+            "<td>" + escapeHTML(getItemOptionsText(item.options)) + "</td>" +
+            "<td>" + getItemPrice(item, COST_PRICE_LIST_ID) + "</td>" +
             priceCells +
-            "<td>" + (p.isVisible ? "✓" : "—") + "</td>" +
+            "<td>" + (item.isForSale ? "✓" : "—") + "</td>" +
             "</tr>";
     });
 
     container.innerHTML =
         '<table class="products-table">' +
             "<thead><tr>" +
-                "<th>Codice</th><th>Nome</th><th>Reparto</th>" +
-                "<th>Varianti</th>" +
+                "<th>Codice</th><th>Nome</th><th>SKU</th><th>Reparto</th>" +
+                "<th>Variante</th>" +
                 "<th>Prezzo costo</th>" +
                 groupHeaders +
-                "<th>Visibile</th>" +
+                "<th>Vendibile</th>" +
             "</tr></thead>" +
             "<tbody>" + rows.join("") + "</tbody>" +
         "</table>";
 }
 
-// --- CSV (tutti i campi) ---
+// --- CSV ---
 
-function downloadCSV(products, producerName) {
+function downloadCSV(items, producerName) {
     const groupNames = activeGroupIds.map(getGroupName);
-
-    const listPriceHeaders  = groupNames.map(function(n) { return "Prezzo listino - " + n; });
-    const salePriceHeaders  = groupNames.map(function(n) { return "Prezzo vendita - " + n; });
-    const promotionHeaders  = groupNames.map(function(n) { return "Promozione ID - " + n; });
+    const priceHeaders = groupNames.map(function(n) { return "Prezzo - " + n; });
 
     const headers = [
-        "ID", "Codice", "SKU",
-        "Nome", "Descrizione breve", "Descrizione lunga", "Descrizione aggiuntiva",
-        "Reparti", "Produttore ID",
-        "Visibile", "In evidenza", "Consenti ordini", "Consenti preventivi", "Mostra prezzo", "Novità",
-        "Qtà min ordine", "Qtà max ordine", "Qtà min preventivo",
-        "Prezzo di costo", "Ha prezzi a scaglioni",
-    ]
-    .concat(listPriceHeaders)
-    .concat(salePriceHeaders)
-    .concat(promotionHeaders)
-    .concat([
-        "Ha varianti", "N. varianti",
-        "Attributi", "Attributi (vista)",
-        "Rating", "Posizione", "Data uscita", "Ultima modifica", "Classe IVA",
-        "SEO Title", "SEO Description", "URL Canonico",
-        "Mostra richieste per", "Info per richieste", "Mostra altre gallerie",
-        "Immagine thumbnail", "Immagine small", "Immagine medium", "Immagine large", "Immagine zoom"
-    ]);
+        "Codice prodotto", "Nome prodotto", "SKU", "Reparto",
+        "Variante", "Prezzo costo",
+    ].concat(priceHeaders).concat(["Vendibile", "Stock"]);
 
-    const rows = products.map(function(p) {
-        const listPriceCells = activeGroupIds.map(function(gid) {
-            return (p.listPrice && p.listPrice[gid] != null) ? Number(p.listPrice[gid]).toFixed(2) : "";
-        });
-        const salePriceCells = activeGroupIds.map(function(gid) {
-            return (p.salePrice && p.salePrice[gid] != null) ? Number(p.salePrice[gid]).toFixed(2) : "";
-        });
-        const promotionCells = activeGroupIds.map(function(gid) {
-            return (p.promotion && p.promotion[gid] != null) ? p.promotion[gid] : "";
+    const rows = items.map(function(item) {
+        const product = productMap[item.product] || {};
+
+        const priceCells = activeGroupIds.map(function(gid) {
+            return (item.price && item.price[gid] != null) ? Number(item.price[gid]).toFixed(2) : "";
         });
 
-        const deptNames = (p.departments || []).map(function(id) {
-            return departmentMap[id] || ("ID " + id);
-        }).join(", ");
-
-        // Attributi: serializza come "attrId:valueId, ..."
-        const attrsStr = p.attributes
-            ? Object.entries(p.attributes).map(function(e) { return e[0] + ":" + e[1]; }).join(", ")
-            : "";
-
-        const variantsCount = Array.isArray(p.variants)
-            ? p.variants.filter(function(v) { return v != null; }).length
-            : "";
+        const costPrice = (item.price && item.price[COST_PRICE_LIST_ID] != null)
+            ? Number(item.price[COST_PRICE_LIST_ID]).toFixed(2) : "";
 
         return [
-            p.id || "",
-            toStr(p.code),
-            toStr(p.sku),
-            toStr(p.name),
-            toStr(p.shortDescription),
-            toStr(p.longDescription),
-            toStr(p.moreDescription),
-            deptNames,
-            p.producer || "",
-            boolCell(p.isVisible),
-            boolCell(p.isFeatured),
-            boolCell(p.allowOrders),
-            boolCell(p.allowQuotes),
-            boolCell(p.showPrice),
-            boolCell(p.isNewRelease),
-            p.minOrder != null ? p.minOrder : "",
-            p.maxOrder != null ? p.maxOrder : "",
-            p.minQuote != null ? p.minQuote : "",
-            costPriceMap[toStr(p.sku)] != null ? Number(costPriceMap[toStr(p.sku)]).toFixed(2) : "",
-            boolCell(p.hasMorePrices),
+            toStr(product.code),
+            toStr(product.name),
+            toStr(item.sku),
+            getDeptNames(product.departments),
+            getItemOptionsText(item.options),
+            costPrice,
         ]
-        .concat(listPriceCells)
-        .concat(salePriceCells)
-        .concat(promotionCells)
+        .concat(priceCells)
         .concat([
-            boolCell(p.hasVariants),
-            variantsCount,
-            attrsStr,
-            p.attributesView ? JSON.stringify(p.attributesView) : "",
-            p.rating != null ? p.rating : "",
-            p.position != null ? p.position : "",
-            p.releaseDate || "",
-            p.updateTime || "",
-            p.taxClass != null ? p.taxClass : "",
-            toStr(p.seoTitle),
-            toStr(p.seoDescription),
-            p.canonicalURL || "",
-            p.showRequestsFor != null ? p.showRequestsFor : "",
-            toStr(p.infoForRequests),
-            boolCell(p.showMoreGalleries),
-            p.thumbnailImage ? (p.thumbnailImage.url || "") : "",
-            p.smallImage ? (p.smallImage.url || "") : "",
-            p.mediumImage ? (p.mediumImage.url || "") : "",
-            p.largeImage ? (p.largeImage.url || "") : "",
-            p.zoomImage ? (p.zoomImage.url || "") : ""
+            boolCell(item.isForSale),
+            item.stock != null ? item.stock : ""
         ])
         .map(csvCell).join(";");
     });
@@ -386,7 +309,7 @@ function downloadCSV(products, producerName) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "prodotti_" + slugify(producerName) + ".csv";
+    link.download = "varianti_" + slugify(producerName) + ".csv";
     link.click();
     URL.revokeObjectURL(url);
 }
