@@ -292,12 +292,7 @@ function downloadAllCSV(items, allProductMap, allActiveGroupIds) {
         "Variante", "Prezzo costo",
     ].concat(priceHeaders).concat(["Vendibile", "Stock"]);
 
-    const visibleItems = items.filter(function(item) {
-        const product = allProductMap[item.product];
-        return product && product.isVisible;
-    });
-
-    const rows = visibleItems.map(function(item) {
+    const rows = items.map(function(item) {
         const product = allProductMap[item.product] || {};
         const producerName = product.producer ? (producerMap[product.producer] || ("ID " + product.producer)) : "—";
 
