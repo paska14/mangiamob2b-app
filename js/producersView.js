@@ -85,6 +85,7 @@ export function setupProducersView() {
             });
         }
         Admin.api("commerce.attribute-values.find", { fields: ["id", "attribute", "name"], limit: 500 }, function(res2) {
+            console.log("[attribute-values] risposta API:", JSON.stringify(res2).slice(0, 1000));
             if (res2.status === "ok") {
                 (res2.values || []).forEach(function(v) {
                     if (attributeMap[v.attribute]) {
