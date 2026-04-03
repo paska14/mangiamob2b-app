@@ -169,13 +169,15 @@ export function setupCatalogView() {
                 return;
             }
 
-            openNoPriceCatalogWindow(productOrder, grouped, productMapLocal, producerName, deptNameNp);
-
-            nopriceBtn.disabled = false;
-            nopriceBtn.textContent = "Genera PDF senza prezzi";
+            // Fetch descrizioni solo per i prodotti filtrati
+            fetchDescriptions(productOrder, function(descMap) {
+                openNoPriceCatalogWindow(productOrder, grouped, productMapLocal, descMap, producerName, deptNameNp);
+                nopriceBtn.disabled = false;
+                nopriceBtn.textContent = "Genera PDF senza prezzi";
+            });
         }
 
-        fetchCatalogProductsWithDesc(producerId, 0, [], function(prods) {
+        fetchCatalogProducts(producerId, 0, [], function(prods) {
             console.log("[catalog-np] fetchProducts:", prods.length);
             allProducts = prods;
             onLoaded();
@@ -206,6 +208,24 @@ function fetchCatalogProducts(producerId, offset, accumulated, callback) {
         } else {
             callback(all);
         }
+    });
+}
+
+function fetchDescriptions(productIds, callback) {
+    const descMap = {};
+    if (!productIds || productIds.length === 0) { callback(descMap); return; }
+    // Prova shortDescription; se il campo non esiste l'API torna errore → descMap vuoto
+    Admin.api("commerce.products.find", {
+        conditions: { ids: productIds },
+        fields: ["id", "shortDescription"],
+        limit: productIds.length
+    }, function(res) {
+        if (res.status === "ok") {
+            (res.products || []).forEach(function(p) {
+                descMap[p.id] = toStr(p.shortDescription);
+            });
+        }
+        callback(descMap);
     });
 }
 
@@ -312,7 +332,7 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
     win.document.close();
 }
 
-function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerName, deptName) {
+function openNoPriceCatalogWindow(productOrder, grouped, productMap, descMap, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
     const npParts = [];
     if (producerName) npParts.push(producerName);
@@ -327,7 +347,7 @@ function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerNam
             ? '<img src="' + escapeAttr(imgUrl) + '" alt="" class="prod-img">'
             : '<div class="prod-img-placeholder"></div>';
 
-        const desc = toStr(product.shortDescription);
+        const desc = descMap[pid] || "";
         const descTag = desc
             ? '<div class="prod-desc">' + desc + '</div>'
             : '';
