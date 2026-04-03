@@ -274,7 +274,6 @@ const LOGO_URL = "https://cdn.open2b.com/xz8in0enw7/var/site/61/editor/logos/3lR
 function openCatalogWindow(productOrder, grouped, productMap, listId, listName, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
     const parts = [listName];
-    if (producerName) parts.push(producerName);
     if (deptName) parts.push(deptName);
     const title = "Catalogo — " + parts.join(" — ");
 
@@ -333,7 +332,6 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
 function openNoPriceCatalogWindow(productOrder, grouped, productMap, descMap, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
     const npParts = [];
-    if (producerName) npParts.push(producerName);
     if (deptName) npParts.push(deptName);
     const title = "Catalogo" + (npParts.length ? " — " + npParts.join(" — ") : " Prodotti");
 
