@@ -1,6 +1,6 @@
 import {
     PAGE_SIZE, COST_PRICE_LIST_ID,
-    PRODUCT_FIELDS, groupMap, producerMap, valueAttrMap,
+    PRODUCT_FIELDS, groupMap, producerMap, departmentMap, valueAttrMap,
     getItemOptionsText, onSharedMapsReady
 } from './producersView.js';
 
@@ -9,6 +9,7 @@ export function setupCatalogView() {
 
     const listSelect     = document.getElementById("catalog-list-select");
     const producerSelect = document.getElementById("catalog-producer-select");
+    const deptSelect     = document.getElementById("catalog-dept-select");
     const generateBtn    = document.getElementById("catalog-generate-btn");
     const nopriceBtn     = document.getElementById("catalog-noprice-btn");
 
@@ -34,8 +35,20 @@ export function setupCatalogView() {
             producerSelect.appendChild(opt);
         });
 
+        // Popola reparti
+        deptSelect.innerHTML = '<option value="">— tutti i reparti —</option>';
+        Object.keys(departmentMap).sort(function(a, b) {
+            return departmentMap[a].localeCompare(departmentMap[b]);
+        }).forEach(function(did) {
+            const opt = document.createElement("option");
+            opt.value = did;
+            opt.textContent = departmentMap[did];
+            deptSelect.appendChild(opt);
+        });
+
         listSelect.disabled = false;
         producerSelect.disabled = false;
+        deptSelect.disabled = false;
         generateBtn.disabled = false;
         nopriceBtn.disabled = false;
     });
@@ -47,8 +60,10 @@ export function setupCatalogView() {
             return;
         }
         const producerId   = producerSelect.value ? parseInt(producerSelect.value, 10) : null;
+        const deptId       = deptSelect.value ? parseInt(deptSelect.value, 10) : null;
         const listName     = groupMap[listId] || listId;
         const producerName = producerId ? (producerMap[producerId] || "") : null;
+        const deptName     = deptId ? (departmentMap[deptId] || "") : null;
 
         generateBtn.disabled = true;
         generateBtn.textContent = "Caricamento...";
@@ -65,7 +80,10 @@ export function setupCatalogView() {
 
             const filtered = allItems.filter(function(item) {
                 const product = productMapLocal[item.product];
-                return product && product.isVisible && item.isForSale && item.price && item.price[listId] != null;
+                if (!product || !product.isVisible || !item.isForSale) return false;
+                if (!item.price || item.price[listId] == null) return false;
+                if (deptId && !(product.departments && product.departments.includes(deptId))) return false;
+                return true;
             });
 
             console.log("[catalog] item filtrati:", filtered.length);
@@ -87,7 +105,7 @@ export function setupCatalogView() {
                 return;
             }
 
-            openCatalogWindow(productOrder, grouped, productMapLocal, listId, listName, producerName);
+            openCatalogWindow(productOrder, grouped, productMapLocal, listId, listName, producerName, deptName);
 
             generateBtn.disabled = false;
             generateBtn.textContent = "Genera PDF";
@@ -108,7 +126,9 @@ export function setupCatalogView() {
 
     nopriceBtn.addEventListener("click", function() {
         const producerId   = producerSelect.value ? parseInt(producerSelect.value, 10) : null;
+        const deptIdNp     = deptSelect.value ? parseInt(deptSelect.value, 10) : null;
         const producerName = producerId ? (producerMap[producerId] || "") : null;
+        const deptNameNp   = deptIdNp ? (departmentMap[deptIdNp] || "") : null;
 
         nopriceBtn.disabled = true;
         nopriceBtn.textContent = "Caricamento...";
@@ -125,7 +145,9 @@ export function setupCatalogView() {
 
             const filtered = allItems.filter(function(item) {
                 const product = productMapLocal[item.product];
-                return product && product.isVisible && item.isForSale;
+                if (!product || !product.isVisible || !item.isForSale) return false;
+                if (deptIdNp && !(product.departments && product.departments.includes(deptIdNp))) return false;
+                return true;
             });
 
             console.log("[catalog-np] item filtrati:", filtered.length);
@@ -147,7 +169,7 @@ export function setupCatalogView() {
                 return;
             }
 
-            openNoPriceCatalogWindow(productOrder, grouped, productMapLocal, producerName);
+            openNoPriceCatalogWindow(productOrder, grouped, productMapLocal, producerName, deptNameNp);
 
             nopriceBtn.disabled = false;
             nopriceBtn.textContent = "Genera PDF senza prezzi";
@@ -229,11 +251,12 @@ function fetchCatalogItems(producerId, offset, accumulated, callback) {
 
 const LOGO_URL = "https://cdn.open2b.com/xz8in0enw7/var/site/61/editor/logos/3lRkdH3m2H-400x124.png";
 
-function openCatalogWindow(productOrder, grouped, productMap, listId, listName, producerName) {
+function openCatalogWindow(productOrder, grouped, productMap, listId, listName, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
-    const title = producerName
-        ? "Catalogo " + producerName + " — " + listName
-        : "Catalogo — " + listName;
+    const parts = [listName];
+    if (producerName) parts.push(producerName);
+    if (deptName) parts.push(deptName);
+    const title = "Catalogo — " + parts.join(" — ");
 
     const cards = productOrder.map(function(pid) {
         const product = productMap[pid] || {};
@@ -273,7 +296,7 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
         '</div>' +
         '<div class="catalog-title">' +
             '<img src="' + LOGO_URL + '" alt="Mangiamo Italiano" class="catalog-logo">' +
-            '<h2>' + escapeHTML(listName) + (producerName ? ' — ' + escapeHTML(producerName) : '') + '</h2>' +
+            '<h2>' + parts.map(escapeHTML).join(' — ') + '</h2>' +
             '<p class="catalog-date">Data: ' + today + '</p>' +
         '</div>' +
         '<div class="catalog-body">' + cards + '</div>' +
@@ -289,11 +312,12 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
     win.document.close();
 }
 
-function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerName) {
+function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
-    const title = producerName
-        ? "Catalogo " + producerName
-        : "Catalogo Prodotti";
+    const npParts = [];
+    if (producerName) npParts.push(producerName);
+    if (deptName) npParts.push(deptName);
+    const title = "Catalogo" + (npParts.length ? " — " + npParts.join(" — ") : " Prodotti");
 
     const cards = productOrder.map(function(pid) {
         const product = productMap[pid] || {};
@@ -335,7 +359,7 @@ function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerNam
         '</div>' +
         '<div class="catalog-title">' +
             '<img src="' + LOGO_URL + '" alt="Mangiamo Italiano" class="catalog-logo">' +
-            '<h2>' + (producerName ? escapeHTML(producerName) : 'Tutti i produttori') + '</h2>' +
+            '<h2>' + (npParts.length ? npParts.map(escapeHTML).join(' — ') : 'Tutti i produttori') + '</h2>' +
             '<p class="catalog-date">Data: ' + today + '</p>' +
         '</div>' +
         '<div class="catalog-body">' + cards + '</div>' +
