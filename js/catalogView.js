@@ -289,12 +289,10 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
         const itemRows = items.map(function(item) {
             const price   = "€ " + Number(item.price[listId]).toFixed(2);
             const options = getItemOptionsText(item.options);
-            const parts   = [];
-            if (options !== "—") parts.push(escapeHTML(options));
-            parts.push('<strong>' + escapeHTML(price) + '</strong>');
+            const detail  = (options !== "—" ? escapeHTML(options) + ' &nbsp;·&nbsp; ' : '') + '<strong>' + escapeHTML(price) + '</strong>';
             return '<div class="item-row">' +
-                '<span class="item-sku">SKU: ' + escapeHTML(item.sku) + '</span>' +
-                (parts.length ? ' <span class="item-detail">' + parts.join(' &nbsp;|&nbsp; ') + '</span>' : '') +
+                '<span class="item-sku">' + escapeHTML(item.sku) + '</span>' +
+                '<span class="item-detail">' + detail + '</span>' +
             '</div>';
         }).join("");
 
@@ -355,8 +353,8 @@ function openNoPriceCatalogWindow(productOrder, grouped, productMap, descMap, pr
         const itemRows = items.map(function(item) {
             const options = getItemOptionsText(item.options);
             return '<div class="item-row">' +
-                '<span class="item-sku">SKU: ' + escapeHTML(item.sku) + '</span>' +
-                (options !== "—" ? ' <span class="item-detail">' + escapeHTML(options) + '</span>' : '') +
+                '<span class="item-sku">' + escapeHTML(item.sku) + '</span>' +
+                (options !== "—" ? '<span class="item-detail">' + escapeHTML(options) + '</span>' : '') +
             '</div>';
         }).join("");
 
@@ -439,10 +437,11 @@ function catalogCSS() {
         .prod-desc p { margin: 0; }
 
         .prod-items { margin-top: 4px; border-top: 1px solid #eee; padding-top: 4px; }
-        .item-row { font-size: 10px; color: #444; margin-top: 3px; display: flex; justify-content: space-between; gap: 6px; }
-        .item-sku { color: #888; flex-shrink: 0; }
-        .item-detail { text-align: right; }
-        .item-detail strong { color: #111; }
+        .item-row { margin-top: 4px; padding-top: 3px; border-top: 1px solid #f5f5f5; }
+        .item-row:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+        .item-sku { display: block; font-size: 9px; color: #aaa; }
+        .item-detail { display: block; font-size: 9px; color: #555; }
+        .item-detail strong { color: #111; font-size: 10px; }
 
         @media print {
             @page { size: A4; margin: 12mm 10mm; }
