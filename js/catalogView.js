@@ -227,6 +227,8 @@ function fetchCatalogItems(producerId, offset, accumulated, callback) {
     });
 }
 
+const LOGO_URL = "https://cdn.open2b.com/xz8in0enw7/var/site/61/editor/logos/3lRkdH3m2H-400x124.png";
+
 function openCatalogWindow(productOrder, grouped, productMap, listId, listName, producerName) {
     const today = new Date().toLocaleDateString("it-IT");
     const title = producerName
@@ -270,7 +272,7 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
             '<button onclick="window.print()">Stampa / Salva PDF</button>' +
         '</div>' +
         '<div class="catalog-title">' +
-            '<h1>Mangiamo Italiano</h1>' +
+            '<img src="' + LOGO_URL + '" alt="Mangiamo Italiano" class="catalog-logo">' +
             '<h2>' + escapeHTML(listName) + (producerName ? ' — ' + escapeHTML(producerName) : '') + '</h2>' +
             '<p class="catalog-date">Data: ' + today + '</p>' +
         '</div>' +
@@ -332,7 +334,7 @@ function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerNam
             '<button onclick="window.print()">Stampa / Salva PDF</button>' +
         '</div>' +
         '<div class="catalog-title">' +
-            '<h1>Mangiamo Italiano</h1>' +
+            '<img src="' + LOGO_URL + '" alt="Mangiamo Italiano" class="catalog-logo">' +
             '<h2>' + (producerName ? escapeHTML(producerName) : 'Tutti i produttori') + '</h2>' +
             '<p class="catalog-date">Data: ' + today + '</p>' +
         '</div>' +
@@ -361,7 +363,7 @@ function catalogCSS() {
         }
 
         .catalog-title { padding: 20px 20px 12px; border-bottom: 2px solid #222; margin-bottom: 16px; }
-        .catalog-title h1 { font-size: 20px; }
+        .catalog-logo { height: 40px; width: auto; display: block; margin-bottom: 6px; }
         .catalog-title h2 { font-size: 14px; font-weight: normal; margin-top: 4px; color: #444; }
         .catalog-date { font-size: 10px; color: #888; margin-top: 4px; }
 
