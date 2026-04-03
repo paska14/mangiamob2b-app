@@ -10,6 +10,7 @@ export function setupCatalogView() {
     const listSelect     = document.getElementById("catalog-list-select");
     const producerSelect = document.getElementById("catalog-producer-select");
     const generateBtn    = document.getElementById("catalog-generate-btn");
+    const nopriceBtn     = document.getElementById("catalog-noprice-btn");
 
     onSharedMapsReady(function() {
         // Popola listini (escluso costo)
@@ -36,6 +37,7 @@ export function setupCatalogView() {
         listSelect.disabled = false;
         producerSelect.disabled = false;
         generateBtn.disabled = false;
+        nopriceBtn.disabled = false;
     });
 
     generateBtn.addEventListener("click", function() {
@@ -44,8 +46,8 @@ export function setupCatalogView() {
             alert("Seleziona un listino.");
             return;
         }
-        const producerId = producerSelect.value ? parseInt(producerSelect.value, 10) : null;
-        const listName   = groupMap[listId] || listId;
+        const producerId   = producerSelect.value ? parseInt(producerSelect.value, 10) : null;
+        const listName     = groupMap[listId] || listId;
         const producerName = producerId ? (producerMap[producerId] || "") : null;
 
         generateBtn.disabled = true;
@@ -61,7 +63,6 @@ export function setupCatalogView() {
             const productMapLocal = {};
             allProducts.forEach(function(p) { productMapLocal[p.id] = p; });
 
-            // Filtra item: prodotto visibile + isForSale + ha prezzo per il listino scelto
             const filtered = allItems.filter(function(item) {
                 const product = productMapLocal[item.product];
                 return product && product.isVisible && item.isForSale && item.price && item.price[listId] != null;
@@ -69,7 +70,6 @@ export function setupCatalogView() {
 
             console.log("[catalog] item filtrati:", filtered.length);
 
-            // Raggruppa per prodotto, mantieni ordine alfabetico del prodotto
             const grouped = {};
             const productOrder = [];
             filtered.forEach(function(item) {
@@ -105,6 +105,66 @@ export function setupCatalogView() {
             onLoaded();
         });
     });
+
+    nopriceBtn.addEventListener("click", function() {
+        const producerId   = producerSelect.value ? parseInt(producerSelect.value, 10) : null;
+        const producerName = producerId ? (producerMap[producerId] || "") : null;
+
+        nopriceBtn.disabled = true;
+        nopriceBtn.textContent = "Caricamento...";
+
+        let allProducts = null;
+        let allItems    = null;
+
+        function onLoaded() {
+            if (allProducts === null || allItems === null) return;
+            console.log("[catalog-np] prodotti:", allProducts.length, "| item:", allItems.length);
+
+            const productMapLocal = {};
+            allProducts.forEach(function(p) { productMapLocal[p.id] = p; });
+
+            const filtered = allItems.filter(function(item) {
+                const product = productMapLocal[item.product];
+                return product && product.isVisible && item.isForSale;
+            });
+
+            console.log("[catalog-np] item filtrati:", filtered.length);
+
+            const grouped = {};
+            const productOrder = [];
+            filtered.forEach(function(item) {
+                if (!grouped[item.product]) {
+                    grouped[item.product] = [];
+                    productOrder.push(item.product);
+                }
+                grouped[item.product].push(item);
+            });
+
+            if (productOrder.length === 0) {
+                alert("Nessun prodotto trovato.");
+                nopriceBtn.disabled = false;
+                nopriceBtn.textContent = "Genera PDF senza prezzi";
+                return;
+            }
+
+            openNoPriceCatalogWindow(productOrder, grouped, productMapLocal, producerName);
+
+            nopriceBtn.disabled = false;
+            nopriceBtn.textContent = "Genera PDF senza prezzi";
+        }
+
+        fetchCatalogProductsWithDesc(producerId, 0, [], function(prods) {
+            console.log("[catalog-np] fetchProducts:", prods.length);
+            allProducts = prods;
+            onLoaded();
+        });
+
+        fetchCatalogItems(producerId, 0, [], function(itms) {
+            console.log("[catalog-np] fetchItems:", itms.length);
+            allItems = itms;
+            onLoaded();
+        });
+    });
 }
 
 function fetchCatalogProducts(producerId, offset, accumulated, callback) {
@@ -121,6 +181,26 @@ function fetchCatalogProducts(producerId, offset, accumulated, callback) {
         const all = accumulated.concat(page);
         if (page.length === PAGE_SIZE) {
             fetchCatalogProducts(producerId, offset + PAGE_SIZE, all, callback);
+        } else {
+            callback(all);
+        }
+    });
+}
+
+function fetchCatalogProductsWithDesc(producerId, offset, accumulated, callback) {
+    const conditions = producerId ? { producer: producerId } : {};
+    Admin.api("commerce.products.find", {
+        conditions: conditions,
+        fields: PRODUCT_FIELDS.concat(["shortDescription"]),
+        order: ["name"],
+        limit: PAGE_SIZE,
+        first: offset
+    }, function(res) {
+        if (res.status !== "ok") { callback(accumulated); return; }
+        const page = res.products || [];
+        const all = accumulated.concat(page);
+        if (page.length === PAGE_SIZE) {
+            fetchCatalogProductsWithDesc(producerId, offset + PAGE_SIZE, all, callback);
         } else {
             callback(all);
         }
@@ -207,6 +287,68 @@ function openCatalogWindow(productOrder, grouped, productMap, listId, listName, 
     win.document.close();
 }
 
+function openNoPriceCatalogWindow(productOrder, grouped, productMap, producerName) {
+    const today = new Date().toLocaleDateString("it-IT");
+    const title = producerName
+        ? "Catalogo " + producerName
+        : "Catalogo Prodotti";
+
+    const cards = productOrder.map(function(pid) {
+        const product = productMap[pid] || {};
+        const items   = grouped[pid];
+        const imgUrl  = product.mediumImage ? product.mediumImage.url : null;
+        const imgTag  = imgUrl
+            ? '<img src="' + escapeAttr(imgUrl) + '" alt="" class="prod-img">'
+            : '<div class="prod-img-placeholder"></div>';
+
+        const desc = toStr(product.shortDescription);
+        const descTag = desc
+            ? '<div class="prod-desc">' + desc + '</div>'
+            : '';
+
+        const itemRows = items.map(function(item) {
+            const options = getItemOptionsText(item.options);
+            return '<div class="item-row">' +
+                '<span class="item-sku">SKU: ' + escapeHTML(item.sku) + '</span>' +
+                (options !== "—" ? ' <span class="item-detail">' + escapeHTML(options) + '</span>' : '') +
+            '</div>';
+        }).join("");
+
+        return '<div class="product-card">' +
+            '<div class="prod-img-cell">' + imgTag + '</div>' +
+            '<div class="prod-name">' + escapeHTML(toStr(product.name)) + '</div>' +
+            '<div class="prod-code">Cod: ' + escapeHTML(toStr(product.code)) + '</div>' +
+            descTag +
+            '<div class="prod-items">' + itemRows + '</div>' +
+        '</div>';
+    }).join("");
+
+    const html = '<!DOCTYPE html><html lang="it"><head>' +
+        '<meta charset="UTF-8">' +
+        '<title>' + escapeHTML(title) + '</title>' +
+        '<style>' + catalogCSS() + '</style>' +
+        '</head><body>' +
+        '<div class="catalog-header no-print">' +
+            '<button onclick="window.print()">Stampa / Salva PDF</button>' +
+        '</div>' +
+        '<div class="catalog-title">' +
+            '<h1>Mangiamo Italiano</h1>' +
+            '<h2>' + (producerName ? escapeHTML(producerName) : 'Tutti i produttori') + '</h2>' +
+            '<p class="catalog-date">Data: ' + today + '</p>' +
+        '</div>' +
+        '<div class="catalog-body">' + cards + '</div>' +
+        '</body></html>';
+
+    const win = window.open("", "_blank");
+    if (!win) {
+        alert("Il browser ha bloccato la finestra popup. Consenti i popup per questa pagina.");
+        return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+}
+
 function catalogCSS() {
     return `
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -246,6 +388,9 @@ function catalogCSS() {
 
         .prod-name { font-weight: bold; font-size: 11px; line-height: 1.3; }
         .prod-code { font-size: 10px; color: #888; }
+
+        .prod-desc { font-size: 10px; color: #555; line-height: 1.4; margin-top: 4px; }
+        .prod-desc p { margin: 0; }
 
         .prod-items { margin-top: 4px; border-top: 1px solid #eee; padding-top: 4px; }
         .item-row { font-size: 10px; color: #444; margin-top: 3px; display: flex; justify-content: space-between; gap: 6px; }
