@@ -273,9 +273,9 @@ const LOGO_URL = "https://cdn.open2b.com/xz8in0enw7/var/site/61/editor/logos/3lR
 
 function openCatalogWindow(productOrder, grouped, productMap, listId, listName, producerName, deptName) {
     const today = new Date().toLocaleDateString("it-IT");
-    const parts = [listName];
+    const parts = ["Listino prezzi"];
     if (deptName) parts.push(deptName);
-    const title = "Catalogo — " + parts.join(" — ");
+    const title = parts.join(" — ");
 
     const cards = productOrder.map(function(pid) {
         const product = productMap[pid] || {};
